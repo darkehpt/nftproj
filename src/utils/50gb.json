@@ -1,0 +1,22 @@
+
+
+{
+  "name": "50GB Plan NFT",
+  "symbol": "PASS",
+  "description": "Redeemable NFT for 50GB of cloud storage",
+  "image": "https://gateway.lighthouse.storage/ipfs/bafybeifcx7hzu6i4wpwf5xquk3wvguwkalexm4zqjce36tozj6hiisvhhe",
+  "collection": {
+    "name": "Data Plans",
+    "family": "StorageNFT"
+  },
+  "seller_fee_basis_points": 500,
+  "creators": [
+    {
+      "address": "64MWbWRdtrE8Rvr3Un59CQ4x3q11ZQHhdRbvtvmw81MG",
+      "share": 100
+    }
+  ],
+  "attributes": [
+    { "trait_type": "Plan", "value": "50GB" }
+  ]
+}

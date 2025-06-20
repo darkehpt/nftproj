@@ -1,0 +1,44 @@
+{
+  "name": "nftproj",
+  "version": "1.0.0",
+  "resolutions": {
+    "@metaplex-foundation/mpl-token-metadata": "3.4.0"
+  },
+  "overrides": {
+    "@metaplex-foundation/mpl-token-metadata": "3.4.0"
+  },
+  "description": "",
+  "main": "createToken2022Mint.js",
+  "scripts": {
+    "preinstall": "npx npm-force-resolutions",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@metaplex-foundation/js": "^0.19.4",
+    "@solana/spl-token": "^0.4.13",
+    "@solana/wallet-adapter-base": "^0.9.27",
+    "@solana/wallet-adapter-react": "^0.15.39",
+    "@solana/wallet-adapter-react-ui": "^0.9.39",
+    "@solana/wallet-adapter-wallets": "^0.19.37",
+    "@solana/web3.js": "^1.98.2",
+    "mime": "^4.0.7",
+    "nft.storage": "^7.2.0",
+    "node-fetch": "^2.7.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
+    "@vitejs/plugin-react": "^4.5.2",
+    "buffer": "^6.0.3",
+    "npm-force-resolutions": "^0.0.10",
+    "vite": "^6.3.5"
+  }
+}

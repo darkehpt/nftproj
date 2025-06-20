@@ -1,0 +1,12 @@
+{
+  "name": "Data Plan NFT - 50GB #2",
+  "symbol": "DPLAN",
+  "description": "Access 50GB of premium storage.",
+  "image": "https://gateway.lighthouse.storage/ipfs/bafkreibmulj277gjjugr6t25looghgle5xjwqfyud6ptikgjvml3nzy7ni",
+  "attributes": [
+    {
+      "trait_type": "Plan",
+      "value": "50GB"
+    }
+  ]
+}

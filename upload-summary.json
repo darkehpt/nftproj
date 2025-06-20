@@ -1,0 +1,47 @@
+[
+  {
+    "filename": "25gb_1.json",
+    "url": "https://gateway.lighthouse.storage/ipfs/bafkreibqqtj5coeddmhigtoby6qmtznsril7y3aomfauloee2vyixep2vi",
+    "plan": "25GB"
+  },
+  {
+    "filename": "50gb_2.json",
+    "url": "https://gateway.lighthouse.storage/ipfs/bafkreiavzgt5lt4lezcfjmkx7wshk6xqoylwidqnjfdjxkr46tjx7kd7gq",
+    "plan": "50GB"
+  },
+  {
+    "filename": "50gb_3.json",
+    "url": "https://gateway.lighthouse.storage/ipfs/bafkreiht2btgoavruv2qehr2c2hzn7xbwfhodssy5cl5ih22pnxul2uucu",
+    "plan": "50GB"
+  },
+  {
+    "filename": "10gb_2.json",
+    "url": "https://gateway.lighthouse.storage/ipfs/bafkreie4ghi3uxy2swlimlwzmnb4jxgs564yovl3yspiorzw4rls7znbc4",
+    "plan": "10GB"
+  },
+  {
+    "filename": "25gb_2.json",
+    "url": "https://gateway.lighthouse.storage/ipfs/bafkreihimc67irx4lwxvn6egzut2xmlnsoqbpnog5mbz4kja5utntamd3m",
+    "plan": "25GB"
+  },
+  {
+    "filename": "50gb_1.json",
+    "url": "https://gateway.lighthouse.storage/ipfs/bafkreicoe635ce6ut3v5zmgnligzaqxpcqcp2efqgz2zx5w6ksjwcvcdce",
+    "plan": "50GB"
+  },
+  {
+    "filename": "10gb_3.json",
+    "url": "https://gateway.lighthouse.storage/ipfs/bafkreifn6zozcdy764hkzks4h3nr5kwlju3wtckk2l32owjxvndth2nvtu",
+    "plan": "10GB"
+  },
+  {
+    "filename": "25gb_3.json",
+    "url": "https://gateway.lighthouse.storage/ipfs/bafkreicwk2wg6ugadyhetprm73e32h4lws6t32qezyhh6qn7xipsrughva",
+    "plan": "25GB"
+  },
+  {
+    "filename": "10gb_1.json",
+    "url": "https://gateway.lighthouse.storage/ipfs/bafkreihjfwp4mmbnlv5gvzozeg32rc2wq3iypxk7er47w6vfp4lazyiqe4",
+    "plan": "10GB"
+  }
+]

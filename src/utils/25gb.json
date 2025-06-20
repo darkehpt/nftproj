@@ -1,0 +1,22 @@
+
+
+{
+  "name": "25GB Plan NFT",
+  "symbol": "PASS",
+  "description": "Redeemable NFT for 25GB of cloud storage",
+    "image": "https://gateway.lighthouse.storage/ipfs/bafybeih2alvbljxa3mgapgdrt3ccsvfjakocy6fsxb6blahzez7kr4a2lm",
+  "collection": {
+    "name": "Data Plans",
+    "family": "StorageNFT"
+  },
+  "seller_fee_basis_points": 500,
+  "creators": [
+    {
+      "address": "64MWbWRdtrE8Rvr3Un59CQ4x3q11ZQHhdRbvtvmw81MG",
+      "share": 100
+    }
+  ],
+  "attributes": [
+    { "trait_type": "Plan", "value": "25GB" }
+  ]
+}

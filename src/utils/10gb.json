@@ -1,0 +1,22 @@
+
+
+{
+  "name": "10GB Plan NFT",
+  "symbol": "PASS",
+  "description": "Redeemable NFT for 10GB of cloud storage",
+  "image": "https://gateway.lighthouse.storage/ipfs/bafybeifflcpzmfcejb7gqvavbcet4dk3ou2i7z5e24s5kcm2yogak6wqmy",
+  "collection": {
+    "name": "Data Plans",
+    "family": "StorageNFT"
+  },
+  "seller_fee_basis_points": 500,
+  "creators": [
+    {
+      "address": "64MWbWRdtrE8Rvr3Un59CQ4x3q11ZQHhdRbvtvmw81MG",
+      "share": 100
+    }
+  ],
+  "attributes": [
+    { "trait_type": "Plan", "value": "10GB" }
+  ]
+}
