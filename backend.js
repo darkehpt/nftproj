@@ -16,9 +16,10 @@ import {
   createMintToInstruction,
   TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
-
+import dotenv from "dotenv";
+dotenv.config();
 // Load mint authority keypair from local JSON (replace with your path)
-const mintAuthoritySecret = JSON.parse(fs.readFileSync("./mint-authority.json"));
+const mintAuthoritySecret = JSON.parse(process.env.MINT_AUTHORITY_SECRET);
 const mintAuthority = Keypair.fromSecretKey(new Uint8Array(mintAuthoritySecret));
 
 // Solana devnet connection

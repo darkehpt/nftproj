@@ -142,7 +142,7 @@ const App = () => {
   setStatus("⏳ Minting your NFT...");
 
   try {
-    const res = await fetch("http://localhost:4000/mint-nft", {
+    const res = await fetch("https://nft-backend.onrender.com/mint-nft", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userPubkey: wallet.publicKey.toBase58(), plan }),
