@@ -4,6 +4,7 @@ import {
   PublicKey,
   clusterApiUrl,
   Transaction,
+  SystemProgram,
 } from "@solana/web3.js";
 import {
   getAssociatedTokenAddress,
@@ -28,14 +29,15 @@ import pass3 from "./utils/pass3.png";
 
 // --- CONFIG ---
 const CONNECTION = new Connection(clusterApiUrl("devnet"), "confirmed");
-const USDC_MINT = new PublicKey("2wpnySC7n6Zp5DFWLAucno9nQpJBZYdVU6TMNHo3UAkN");
+//const USDC_MINT = new PublicKey("2wpnySC7n6Zp5DFWLAucno9nQpJBZYdVU6TMNHo3UAkN");
 const RECEIVER_USDC = new PublicKey("64MWbWRdtrE8Rvr3Un59CQ4x3q11ZQHhdRbvtvmw81MG");
-const PLAN_PRICES = { "10GB": 0.1, "25GB": 0.25, "50GB": 0.5 };
+const PLAN_PRICES = { "10GB": 0.001, "25GB": 0.025, "50GB": 0.05 };
 const NFT_MINTS = {
-  "10GB": new PublicKey("CY6bLqxa4sjxtFctujQUMDwrSR3bsPWyYG22C2dtVP6G"),
-  "25GB": new PublicKey("D3VtXx5HN7AWFz9kT1QbhowpJc8GMhqrwV95fbArjCPX"),
-  "50GB": new PublicKey("DHHmw8tMW2sFZPTfdfpZszP5gkoiiEyuazqBp6rq58aZ"),
+  "10GB": new PublicKey("GXsBcsscLxMRKLgwWWnKkUzuXdEXwr74NiSqJrBs21Mz"),
+  "25GB": new PublicKey("HDtzBt6nvoHLhiV8KLrovhnP4pYesguq89J2vZZbn6kA"),
+  "50GB": new PublicKey("C6is6ajmWgySMA4WpDfccadLf5JweXVufdXexWNrLKKD"),
 };
+
 
 // Map plan to imported images
 const PLAN_IMAGES = {
@@ -67,6 +69,8 @@ async function getOrCreateATA(connection, mint, owner, payer, tx, tokenProgramId
   return ata;
 }
 
+const MINT_AUTHORITY = new PublicKey("54vznniXt38DrZgHBZiJDV7VapxjfgutJHQZ9R8smYUR");
+
 const App = () => {
   const wallet = useWallet();
   const [plan, setPlan] = useState("10GB");
@@ -74,7 +78,6 @@ const App = () => {
   const [nftBalance, setNftBalance] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  // Fetch NFT balance helper
   const fetchNftBalance = async () => {
     if (!wallet.connected || !wallet.publicKey) {
       setNftBalance(0);
@@ -86,8 +89,12 @@ const App = () => {
       const accountInfo = await getAccount(CONNECTION, ata, "confirmed", TOKEN_2022_PROGRAM_ID);
       setNftBalance(Number(accountInfo.amount));
     } catch (err) {
-      console.warn("[fetchNftBalance] Error fetching NFT balance:", err);
-      setNftBalance(0);
+      if (err.name === "TokenAccountNotFoundError") {
+        setNftBalance(0);
+      } else {
+        console.warn("Error fetching balance:", err);
+        setNftBalance(0);
+      }
     }
   };
 
@@ -96,103 +103,75 @@ const App = () => {
   }, [wallet.connected, wallet.publicKey, plan]);
 
   const handlePayAndMint = async () => {
-    if (loading) return;
-    if (!wallet.connected || !wallet.publicKey) {
-      setStatus("Please connect your wallet first.");
-      return;
+  if (!wallet.connected || !wallet.publicKey) {
+    return setStatus("❗ Connect your wallet first.");
+  }
+  if (loading) return;
+
+  setLoading(true);
+  setStatus("⏳ Processing payment...");
+
+  try {
+    const tx = new Transaction();
+    const { blockhash } = await CONNECTION.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = wallet.publicKey;
+
+    const price = PLAN_PRICES[plan] * 1e9; // convert SOL to lamports
+
+    tx.add(
+      SystemProgram.transfer({
+        fromPubkey: wallet.publicKey,
+        toPubkey: RECEIVER_USDC,
+        lamports: price,
+      })
+    );
+
+    const signedTx = await wallet.signTransaction(tx);
+    const txid = await CONNECTION.sendRawTransaction(signedTx.serialize());
+    await CONNECTION.confirmTransaction(txid, "confirmed");
+
+    setStatus(`💸 Payment successful! Tx: ${txid}`);
+  } catch (err) {
+    console.error(err);
+    setStatus(`❌ Payment failed: ${err.message}`);
+    setLoading(false);
+    return;
+  }
+
+  setStatus("⏳ Minting your NFT...");
+
+  try {
+    const res = await fetch("http://localhost:4000/mint-nft", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userPubkey: wallet.publicKey.toBase58(), plan }),
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      setStatus(`🎉 NFT minted! Tx: ${data.txid}`);
+    } else {
+      throw new Error(data.error || "Mint failed");
     }
-    setLoading(true);
-    setStatus("Starting payment and minting...");
-
-    try {
-      const tx = new Transaction();
-      const { blockhash } = await CONNECTION.getLatestBlockhash();
-      tx.recentBlockhash = blockhash;
-      tx.feePayer = wallet.publicKey;
-
-      const userUsdcAta = await getOrCreateATA(
-        CONNECTION,
-        USDC_MINT,
-        wallet.publicKey,
-        wallet.publicKey,
-        tx,
-        TOKEN_PROGRAM_ID
-      );
-
-      const receiverUsdcAta = await getOrCreateATA(
-        CONNECTION,
-        USDC_MINT,
-        RECEIVER_USDC,
-        wallet.publicKey,
-        tx,
-        TOKEN_PROGRAM_ID
-      );
-
-      const amount = PLAN_PRICES[plan] * 1e6;
-      tx.add(
-        createTransferCheckedInstruction(
-          userUsdcAta,
-          USDC_MINT,
-          receiverUsdcAta,
-          wallet.publicKey,
-          amount,
-          6,
-          TOKEN_PROGRAM_ID
-        )
-      );
-
-      const nftMint = NFT_MINTS[plan];
-      if (!nftMint) {
-        setStatus("Invalid NFT mint address.");
-        setLoading(false);
-        return;
-      }
-
-      const userNftAta = await getOrCreateATA(
-        CONNECTION,
-        nftMint,
-        wallet.publicKey,
-        wallet.publicKey,
-        tx,
-        TOKEN_2022_PROGRAM_ID
-      );
-
-      tx.add(
-        createMintToInstruction(
-          nftMint,
-          userNftAta,
-          wallet.publicKey,
-          1,
-          [],
-          TOKEN_2022_PROGRAM_ID
-        )
-      );
-
-      const signedTx = await wallet.signTransaction(tx);
-      const txid = await CONNECTION.sendRawTransaction(signedTx.serialize());
-      await CONNECTION.confirmTransaction(txid, "confirmed");
-
-      console.log(`[handlePayAndMint] ✅ Transaction successful: ${txid}`);
-      setStatus(`NFT Minted! Txid: ${txid}`);
-
-      // Refresh NFT balance after mint
-      await fetchNftBalance();
-    } catch (err) {
-      console.error("[handlePayAndMint] ❌ Error:", err);
-      setStatus(`Error: ${err.message || err.toString()}`);
-    } finally {
-      setLoading(false);
-    }
-  };
+    await fetchNftBalance();
+  } catch (err) {
+    console.error(err);
+    setStatus(`❌ NFT minting failed: ${err.message}`);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleBurn = async () => {
-    if (loading) return;
     if (!wallet.connected || !wallet.publicKey) {
-      setStatus("Please connect your wallet first.");
-      return;
+      return setStatus("❗ Connect your wallet first.");
     }
+    if (loading) return;
+
     setLoading(true);
-    setStatus("Starting burn process...");
+    setStatus("⏳ Burning NFT...");
+
     try {
       const tx = new Transaction();
       const { blockhash } = await CONNECTION.getLatestBlockhash();
@@ -202,29 +181,17 @@ const App = () => {
       const nftMint = NFT_MINTS[plan];
       const userNftAta = await getAssociatedTokenAddress(nftMint, wallet.publicKey, false, TOKEN_2022_PROGRAM_ID);
 
-      tx.add(
-        createBurnInstruction(
-          userNftAta,
-          nftMint,
-          wallet.publicKey,
-          1,
-          [],
-          TOKEN_2022_PROGRAM_ID
-        )
-      );
+      tx.add(createBurnInstruction(userNftAta, nftMint, wallet.publicKey, 1, [], TOKEN_2022_PROGRAM_ID));
 
       const signedTx = await wallet.signTransaction(tx);
       const txid = await CONNECTION.sendRawTransaction(signedTx.serialize());
-      await CONNECTION.confirmTransaction(txid, "confirmed");
+      await CONNECTION.confirmTransaction(txid);
 
-      console.log(`[handleBurn] Burn successful: ${txid}`);
-      setStatus(`NFT burned successfully! Transaction ID: ${txid}`);
-
-      // Refresh NFT balance after burn
+      setStatus(`🔥 Burn successful! Tx: ${txid}`);
       await fetchNftBalance();
     } catch (err) {
-      console.error("[handleBurn] Error:", err);
-      setStatus(`Error: ${err.message}`);
+      console.error(err);
+      setStatus(`❌ Burn error: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -232,7 +199,7 @@ const App = () => {
 
   return (
     <div className="p-6 max-w-screen-md mx-auto text-center space-y-4">
-      <h1 className="text-2xl font-bold">🚀 Buy & Mint Data‑Plan NFT</h1>
+      <h1 className="text-2xl font-bold">🚀 Buy & Mint Data Plan NFT</h1>
       <WalletMultiButton />
       <div>
         <select
@@ -240,21 +207,21 @@ const App = () => {
           value={plan}
           onChange={(e) => setPlan(e.target.value)}
         >
-          <option value="10GB">10GB – 0.1 USDC</option>
-          <option value="25GB">25GB – 0.25 USDC</option>
-          <option value="50GB">50GB – 0.5 USDC</option>
+          <option value="10GB">10GB – 0.001 SOL</option>
+          <option value="25GB">25GB – 0.025 SOL</option>
+          <option value="50GB">50GB – 0.05 SOL</option>
         </select>
       </div>
 
       <div className="flex flex-col items-center space-y-2">
-      <img
-src={PLAN_IMAGES[plan]}
-alt={`${plan} pass image`}
-style={{ width: "300px", height: "300px" }}
-className="rounded shadow-md"
-/>
+        <img
+          src={PLAN_IMAGES[plan]}
+          alt={`${plan} pass`}
+          style={{ width: "300px", height: "300px" }}
+          className="rounded shadow-md"
+        />
         <p className="text-lg font-semibold">
-          Quantity owned: <span className="text-blue-600">{nftBalance}</span>
+          Owned: <span className="text-blue-600">{nftBalance}</span>
         </p>
       </div>
 
@@ -274,6 +241,7 @@ className="rounded shadow-md"
           {loading ? "Processing..." : "🔥 Burn NFT"}
         </button>
       </div>
+
       {status && <p className="mt-4">{status}</p>}
     </div>
   );

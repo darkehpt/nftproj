@@ -28,6 +28,8 @@
     "@solana/wallet-adapter-react-ui": "^0.9.39",
     "@solana/wallet-adapter-wallets": "^0.19.37",
     "@solana/web3.js": "^1.98.2",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
     "mime": "^4.0.7",
     "nft.storage": "^7.2.0",
     "node-fetch": "^2.7.0",
@@ -40,5 +42,13 @@
     "buffer": "^6.0.3",
     "npm-force-resolutions": "^0.0.10",
     "vite": "^6.3.5"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/darkehpt/nftproj.git"
+  },
+  "bugs": {
+    "url": "https://github.com/darkehpt/nftproj/issues"
+  },
+  "homepage": "https://github.com/darkehpt/nftproj#readme"
 }
