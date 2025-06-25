@@ -17,8 +17,15 @@ import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
-import { useWallet, ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react";
-import { WalletModalProvider, WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+import {
+  useWallet,
+  ConnectionProvider,
+  WalletProvider,
+} from "@solana/wallet-adapter-react";
+import {
+  WalletModalProvider,
+  WalletMultiButton,
+} from "@solana/wallet-adapter-react-ui";
 import { PhantomWalletAdapter } from "@solana/wallet-adapter-wallets";
 import "@solana/wallet-adapter-react-ui/styles.css";
 
@@ -29,7 +36,6 @@ import pass3 from "./utils/pass3.png";
 
 // --- CONFIG ---
 const CONNECTION = new Connection(clusterApiUrl("devnet"), "confirmed");
-//const USDC_MINT = new PublicKey("2wpnySC7n6Zp5DFWLAucno9nQpJBZYdVU6TMNHo3UAkN");
 const RECEIVER_USDC = new PublicKey("64MWbWRdtrE8Rvr3Un59CQ4x3q11ZQHhdRbvtvmw81MG");
 const PLAN_PRICES = { "10GB": 0.001, "25GB": 0.025, "50GB": 0.05 };
 const NFT_MINTS = {
@@ -37,7 +43,6 @@ const NFT_MINTS = {
   "25GB": new PublicKey("HDtzBt6nvoHLhiV8KLrovhnP4pYesguq89J2vZZbn6kA"),
   "50GB": new PublicKey("C6is6ajmWgySMA4WpDfccadLf5JweXVufdXexWNrLKKD"),
 };
-
 
 // Map plan to imported images
 const PLAN_IMAGES = {
@@ -68,8 +73,6 @@ async function getOrCreateATA(connection, mint, owner, payer, tx, tokenProgramId
   }
   return ata;
 }
-
-const MINT_AUTHORITY = new PublicKey("54vznniXt38DrZgHBZiJDV7VapxjfgutJHQZ9R8smYUR");
 
 const App = () => {
   const wallet = useWallet();
@@ -103,65 +106,65 @@ const App = () => {
   }, [wallet.connected, wallet.publicKey, plan]);
 
   const handlePayAndMint = async () => {
-  if (!wallet.connected || !wallet.publicKey) {
-    return setStatus("❗ Connect your wallet first.");
-  }
-  if (loading) return;
-
-  setLoading(true);
-  setStatus("⏳ Processing payment...");
-
-  try {
-    const tx = new Transaction();
-    const { blockhash } = await CONNECTION.getLatestBlockhash();
-    tx.recentBlockhash = blockhash;
-    tx.feePayer = wallet.publicKey;
-
-    const price = PLAN_PRICES[plan] * 1e9; // convert SOL to lamports
-
-    tx.add(
-      SystemProgram.transfer({
-        fromPubkey: wallet.publicKey,
-        toPubkey: RECEIVER_USDC,
-        lamports: price,
-      })
-    );
-
-    const signedTx = await wallet.signTransaction(tx);
-    const txid = await CONNECTION.sendRawTransaction(signedTx.serialize());
-    await CONNECTION.confirmTransaction(txid, "confirmed");
-
-    setStatus(`💸 Payment successful! Tx: ${txid}`);
-  } catch (err) {
-    console.error(err);
-    setStatus(`❌ Payment failed: ${err.message}`);
-    setLoading(false);
-    return;
-  }
-
-  setStatus("⏳ Minting your NFT...");
-
-  try {
-    const res = await fetch("https://nftproj.onrender.com/mint-nft", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userPubkey: wallet.publicKey.toBase58(), plan }),
-    });
-    const data = await res.json();
-
-    if (data.success) {
-      setStatus(`🎉 NFT minted! Tx: ${data.txid}`);
-    } else {
-      throw new Error(data.error || "Mint failed");
+    if (!wallet.connected || !wallet.publicKey) {
+      return setStatus("❗ Connect your wallet first.");
     }
-    await fetchNftBalance();
-  } catch (err) {
-    console.error(err);
-    setStatus(`❌ NFT minting failed: ${err.message}`);
-  } finally {
-    setLoading(false);
-  }
-};
+    if (loading) return;
+
+    setLoading(true);
+    setStatus("⏳ Processing payment...");
+
+    try {
+      const tx = new Transaction();
+      const { blockhash } = await CONNECTION.getLatestBlockhash();
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = wallet.publicKey;
+
+      const price = PLAN_PRICES[plan] * 1e9; // convert SOL to lamports
+
+      tx.add(
+        SystemProgram.transfer({
+          fromPubkey: wallet.publicKey,
+          toPubkey: RECEIVER_USDC,
+          lamports: price,
+        })
+      );
+
+      const signedTx = await wallet.signTransaction(tx);
+      const txid = await CONNECTION.sendRawTransaction(signedTx.serialize());
+      await CONNECTION.confirmTransaction(txid, "confirmed");
+
+      setStatus(`💸 Payment successful! Tx: ${txid}`);
+    } catch (err) {
+      console.error(err);
+      setStatus(`❌ Payment failed: ${err.message}`);
+      setLoading(false);
+      return;
+    }
+
+    setStatus("⏳ Minting your NFT...");
+
+    try {
+      const res = await fetch("https://nftproj.onrender.com/mint-nft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userPubkey: wallet.publicKey.toBase58(), plan }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setStatus(`🎉 NFT minted! Tx: ${data.txid}`);
+      } else {
+        throw new Error(data.error || "Mint failed");
+      }
+      await fetchNftBalance();
+    } catch (err) {
+      console.error(err);
+      setStatus(`❌ NFT minting failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleBurn = async () => {
     if (!wallet.connected || !wallet.publicKey) {
@@ -170,28 +173,26 @@ const App = () => {
     if (loading) return;
 
     setLoading(true);
-    setStatus("⏳ Burning NFT...");
+    setStatus("⏳ Requesting burn from backend...");
 
     try {
-      const tx = new Transaction();
-      const { blockhash } = await CONNECTION.getLatestBlockhash();
-      tx.recentBlockhash = blockhash;
-      tx.feePayer = wallet.publicKey;
+      const res = await fetch("https://nftproj.onrender.com/burn-nft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userPubkey: wallet.publicKey.toBase58(), plan }),
+      });
+      const data = await res.json();
 
-      const nftMint = NFT_MINTS[plan];
-      const userNftAta = await getAssociatedTokenAddress(nftMint, wallet.publicKey, false, TOKEN_2022_PROGRAM_ID);
+      if (data.success) {
+        setStatus(`🔥 NFT burned successfully! Tx: ${data.txid}`);
+      } else {
+        throw new Error(data.error || "Burn failed");
+      }
 
-      tx.add(createBurnInstruction(userNftAta, nftMint, wallet.publicKey, 1, [], TOKEN_2022_PROGRAM_ID));
-
-      const signedTx = await wallet.signTransaction(tx);
-      const txid = await CONNECTION.sendRawTransaction(signedTx.serialize());
-      await CONNECTION.confirmTransaction(txid);
-
-      setStatus(`🔥 Burn successful! Tx: ${txid}`);
       await fetchNftBalance();
     } catch (err) {
       console.error(err);
-      setStatus(`❌ Burn error: ${err.message}`);
+      setStatus(`❌ Burn failed: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -246,7 +247,6 @@ const App = () => {
     </div>
   );
 };
-
 
 const AppWrapper = () => {
   const wallets = [new PhantomWalletAdapter()];
