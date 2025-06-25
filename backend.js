@@ -17,8 +17,8 @@ import {
   createMintToInstruction,
   createBurnInstruction,
   createCloseAccountInstruction,
-  createSetAuthorityInstruction,
-  AuthorityType,
+  // createSetAuthorityInstruction,
+  // AuthorityType,
   TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
 
@@ -81,7 +81,7 @@ app.post("/mint-nft", async (req, res) => {
 
     const tx = new Transaction();
 
-    // Mint 1 token
+    // Mint 1 token to user's ATA
     tx.add(
       createMintToInstruction(
         mint,
@@ -93,25 +93,9 @@ app.post("/mint-nft", async (req, res) => {
       )
     );
 
-    // Set authorities
-    // Set authorities (Only valid authority types for a Mint)
-    const authorityTypes = [
-      AuthorityType.MintTokens,
-      AuthorityType.BurnTokens, // Optional: Allows admin to burn
-    ];
-
-    authorityTypes.forEach((type) => {
-      tx.add(
-        createSetAuthorityInstruction(
-          mint,
-          mintAuthority.publicKey,
-          type,
-          mintAuthority.publicKey,
-          [],
-          TOKEN_2022_PROGRAM_ID
-        )
-      );
-    });
+    // NOTE: Setting mint authorities (mint, burn, freeze) is usually done once by the mint creator,
+    // not on every mint call. So it's commented out here.
+    // If you want to set authorities, do it separately, carefully.
 
     const { blockhash } = await connection.getLatestBlockhash();
     tx.recentBlockhash = blockhash;
@@ -131,6 +115,7 @@ app.post("/mint-nft", async (req, res) => {
 });
 
 // === ADMIN BURN ===
+// Use backend's mintAuthority as delegate to burn user's NFT without user signature
 app.post("/burn-nft", async (req, res) => {
   try {
     const { userPubkey, plan } = req.body;
@@ -144,7 +129,7 @@ app.post("/burn-nft", async (req, res) => {
 
     const tx = new Transaction();
 
-    // Burn 1 token (admin-initiated)
+    // Burn 1 token from user's ATA (as delegated authority)
     tx.add(
       createBurnInstruction(
         ata,
@@ -156,7 +141,7 @@ app.post("/burn-nft", async (req, res) => {
       )
     );
 
-    // Close ATA
+    // Close the ATA (returns SOL to user)
     tx.add(
       createCloseAccountInstruction(
         ata,

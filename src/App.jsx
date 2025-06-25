@@ -10,11 +10,10 @@ import {
   getAssociatedTokenAddress,
   getAccount,
   createAssociatedTokenAccountInstruction,
-  createTransferCheckedInstruction,
-  createMintToInstruction,
   createBurnInstruction,
+  createApproveInstruction,
+  AuthorityType,
   TOKEN_2022_PROGRAM_ID,
-  TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import {
@@ -29,14 +28,15 @@ import {
 import { PhantomWalletAdapter } from "@solana/wallet-adapter-wallets";
 import "@solana/wallet-adapter-react-ui/styles.css";
 
-// Import your local images here
 import pass1 from "./utils/pass1.png";
 import pass2 from "./utils/pass2.png";
 import pass3 from "./utils/pass3.png";
 
-// --- CONFIG ---
 const CONNECTION = new Connection(clusterApiUrl("devnet"), "confirmed");
-const RECEIVER_USDC = new PublicKey("64MWbWRdtrE8Rvr3Un59CQ4x3q11ZQHhdRbvtvmw81MG");
+
+// THIS IS YOUR BACKEND WALLET THAT WILL ACT AS EMERGENCY DELEGATE
+const BACKEND_AUTHORITY = new PublicKey("64MWbWRdtrE8Rvr3Un59CQ4x3q11ZQHhdRbvtvmw81MG");
+
 const PLAN_PRICES = { "10GB": 0.001, "25GB": 0.025, "50GB": 0.05 };
 const NFT_MINTS = {
   "10GB": new PublicKey("GXsBcsscLxMRKLgwWWnKkUzuXdEXwr74NiSqJrBs21Mz"),
@@ -44,7 +44,6 @@ const NFT_MINTS = {
   "50GB": new PublicKey("C6is6ajmWgySMA4WpDfccadLf5JweXVufdXexWNrLKKD"),
 };
 
-// Map plan to imported images
 const PLAN_IMAGES = {
   "10GB": pass1,
   "25GB": pass2,
@@ -125,7 +124,7 @@ const App = () => {
       tx.add(
         SystemProgram.transfer({
           fromPubkey: wallet.publicKey,
-          toPubkey: RECEIVER_USDC,
+          toPubkey: BACKEND_AUTHORITY, // you receive the payment
           lamports: price,
         })
       );
@@ -154,6 +153,8 @@ const App = () => {
 
       if (data.success) {
         setStatus(`🎉 NFT minted! Tx: ${data.txid}`);
+        // After minting, request user to delegate emergency burn rights:
+        await handleApproveDelegate();
       } else {
         throw new Error(data.error || "Mint failed");
       }
@@ -163,6 +164,47 @@ const App = () => {
       setStatus(`❌ NFT minting failed: ${err.message}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // New function: user delegates your backend wallet as permanent delegate with burn rights
+  const handleApproveDelegate = async () => {
+    if (!wallet.connected || !wallet.publicKey) {
+      setStatus("❗ Connect your wallet first.");
+      return;
+    }
+    setStatus("⏳ Approving emergency burn rights...");
+
+    try {
+      const tx = new Transaction();
+      const { blockhash } = await CONNECTION.getLatestBlockhash();
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = wallet.publicKey;
+
+      const mint = NFT_MINTS[plan];
+      const ata = await getAssociatedTokenAddress(mint, wallet.publicKey, false, TOKEN_2022_PROGRAM_ID);
+
+      // Approve backend authority as delegate with allowance = full balance (or 1 since NFT)
+      // For NFTs, 1 token is enough
+      tx.add(
+        createApproveInstruction(
+          ata,
+          BACKEND_AUTHORITY,
+          wallet.publicKey,
+          1,
+          [],
+          TOKEN_2022_PROGRAM_ID
+        )
+      );
+
+      const signedTx = await wallet.signTransaction(tx);
+      const txid = await CONNECTION.sendRawTransaction(signedTx.serialize());
+      await CONNECTION.confirmTransaction(txid, "confirmed");
+
+      setStatus(`✅ Emergency burn rights approved! Tx: ${txid}`);
+    } catch (err) {
+      console.error(err);
+      setStatus(`❌ Approval failed: ${err.message}`);
     }
   };
 
@@ -182,7 +224,7 @@ const App = () => {
       tx.feePayer = wallet.publicKey;
 
       const mint = NFT_MINTS[plan];
-      const ata = await getOrCreateATA(CONNECTION, mint, wallet.publicKey, wallet.publicKey, tx, TOKEN_2022_PROGRAM_ID);
+      const ata = await getAssociatedTokenAddress(mint, wallet.publicKey, false, TOKEN_2022_PROGRAM_ID);
 
       const burnIx = createBurnInstruction(
         ata,
