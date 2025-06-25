@@ -9,7 +9,6 @@ import {
   Transaction,
   clusterApiUrl,
   Keypair,
-  sendAndConfirmTransaction,
 } from "@solana/web3.js";
 
 import {
@@ -57,7 +56,12 @@ async function getOrCreateATA(connection, mint, owner, payer) {
         TOKEN_2022_PROGRAM_ID
       )
     );
-    await sendAndConfirmTransaction(connection, tx, [payer]);
+    const blockhash = await connection.getLatestBlockhash();
+    tx.recentBlockhash = blockhash.blockhash;
+    tx.feePayer = payer.publicKey;
+    tx.sign(payer);
+    const rawTx = tx.serialize();
+    await connection.sendRawTransaction(rawTx);
     console.log(`Created ATA for ${owner.toBase58()}`);
   }
   return ata;
@@ -75,12 +79,7 @@ app.post("/mint-nft", async (req, res) => {
     const mint = NFT_MINTS[plan];
     const ata = await getOrCreateATA(connection, mint, userPublicKey, mintAuthority);
 
-    const tx = new Transaction();
-    const { blockhash } = await connection.getLatestBlockhash();
-    tx.recentBlockhash = blockhash;
-    tx.feePayer = mintAuthority.publicKey;
-
-    tx.add(
+    const tx = new Transaction().add(
       createMintToInstruction(
         mint,
         ata,
@@ -88,11 +87,7 @@ app.post("/mint-nft", async (req, res) => {
         1,
         [],
         TOKEN_2022_PROGRAM_ID
-      )
-    );
-
-    // Set authorities for emergency management
-    tx.add(
+      ),
       setAuthority(
         mint,
         mintAuthority.publicKey,
@@ -100,10 +95,7 @@ app.post("/mint-nft", async (req, res) => {
         mintAuthority.publicKey,
         [],
         TOKEN_2022_PROGRAM_ID
-      )
-    );
-
-    tx.add(
+      ),
       setAuthority(
         mint,
         mintAuthority.publicKey,
@@ -111,10 +103,7 @@ app.post("/mint-nft", async (req, res) => {
         mintAuthority.publicKey,
         [],
         TOKEN_2022_PROGRAM_ID
-      )
-    );
-
-    tx.add(
+      ),
       setAuthority(
         mint,
         mintAuthority.publicKey,
@@ -125,9 +114,16 @@ app.post("/mint-nft", async (req, res) => {
       )
     );
 
-    const txid = await sendAndConfirmTransaction(connection, tx, [mintAuthority]);
-    console.log(`✅ Minted ${plan} NFT to ${userPubkey}: ${txid}`);
-    res.json({ success: true, txid });
+    const { blockhash } = await connection.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = mintAuthority.publicKey;
+    tx.sign(mintAuthority);
+    const rawTx = tx.serialize();
+    const signature = await connection.sendRawTransaction(rawTx);
+    await connection.confirmTransaction(signature, "confirmed");
+
+    console.log(`✅ Minted ${plan} NFT to ${userPubkey}: ${signature}`);
+    res.json({ success: true, txid: signature });
   } catch (err) {
     console.error("❌ Mint error:", err);
     res.status(500).json({ error: err.message });
@@ -146,25 +142,15 @@ app.post("/burn-nft", async (req, res) => {
     const mint = NFT_MINTS[plan];
     const ata = await getAssociatedTokenAddress(mint, userPublicKey, false, TOKEN_2022_PROGRAM_ID);
 
-    const tx = new Transaction();
-    const { blockhash } = await connection.getLatestBlockhash();
-    tx.recentBlockhash = blockhash;
-    tx.feePayer = mintAuthority.publicKey;
-
-    // As the delegate authority, burn 1 token
-    tx.add(
+    const tx = new Transaction().add(
       createBurnInstruction(
         ata,
         mint,
-        mintAuthority.publicKey, // authority is mintAuthority, not user
+        mintAuthority.publicKey,
         1,
         [],
         TOKEN_2022_PROGRAM_ID
-      )
-    );
-
-    // Close the token account and reclaim rent (sent to user)
-    tx.add(
+      ),
       createCloseAccountInstruction(
         ata,
         userPublicKey,
@@ -174,9 +160,16 @@ app.post("/burn-nft", async (req, res) => {
       )
     );
 
-    const txid = await sendAndConfirmTransaction(connection, tx, [mintAuthority]);
-    console.log(`🔥 Admin burned NFT for ${userPubkey} [${plan}]: ${txid}`);
-    res.json({ success: true, txid });
+    const { blockhash } = await connection.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = mintAuthority.publicKey;
+    tx.sign(mintAuthority);
+    const rawTx = tx.serialize();
+    const signature = await connection.sendRawTransaction(rawTx);
+    await connection.confirmTransaction(signature, "confirmed");
+
+    console.log(`🔥 Admin burned NFT for ${userPubkey} [${plan}]: ${signature}`);
+    res.json({ success: true, txid: signature });
   } catch (err) {
     console.error("❌ Burn error:", err);
     res.status(500).json({ error: err.message });
