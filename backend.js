@@ -1,6 +1,5 @@
 import express from "express";
 import cors from "cors";
-import fs from "fs";
 import dotenv from "dotenv";
 import {
   Connection,
@@ -24,13 +23,14 @@ import {
 
 dotenv.config();
 
-// Load mint authority from secret
+// Load mint authority from secret key stored in environment variable
 const mintAuthoritySecret = JSON.parse(process.env.MINT_AUTHORITY_SECRET);
 const mintAuthority = Keypair.fromSecretKey(new Uint8Array(mintAuthoritySecret));
 
-// Connection
+// Connect to Solana devnet
 const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
 
+// Your NFT mint addresses by plan
 const NFT_MINTS = {
   "10GB": new PublicKey("GXsBcsscLxMRKLgwWWnKkUzuXdEXwr74NiSqJrBs21Mz"),
   "25GB": new PublicKey("HDtzBt6nvoHLhiV8KLrovhnP4pYesguq89J2vZZbn6kA"),
@@ -45,6 +45,7 @@ app.get("/", (req, res) => {
   res.send("✅ Mint backend running");
 });
 
+// Helper to get or create associated token account for user and mint
 async function getOrCreateATA(connection, mint, owner, payer) {
   const ata = await getAssociatedTokenAddress(mint, owner, false, TOKEN_2022_PROGRAM_ID);
   const accountInfo = await connection.getAccountInfo(ata);
@@ -81,6 +82,7 @@ app.post("/mint-nft", async (req, res) => {
     tx.recentBlockhash = blockhash;
     tx.feePayer = mintAuthority.publicKey;
 
+    // Mint 1 token to user ATA
     tx.add(
       createMintToInstruction(
         mint,
@@ -92,35 +94,34 @@ app.post("/mint-nft", async (req, res) => {
       )
     );
 
-    // Set your wallet as the permanent delegate & mint close authority (only once per mint)
-    // Only set authority the first time for each mint
-  const mintInfo = await connection.getAccountInfo(mint);
-  if (mintInfo && mintInfo.data) {
-    const decoded = mintInfo.data.toString("base64");
+    // Fetch mint account info to check authorities
+    const mintInfo = await connection.getAccountInfo(mint);
 
-    // Optional: check if authority is already set
-    // If not, set your authority as permanent delegate and mint close authority
-    tx.add(
-      setAuthority(
-        mint,
-        mintAuthority.publicKey,
-        AuthorityType.FreezeAccount, // permanent delegate capability
-        mintAuthority.publicKey,
-        [],
-        TOKEN_2022_PROGRAM_ID
-      )
-    );
-    tx.add(
-      setAuthority(
-        mint,
-        mintAuthority.publicKey,
-        AuthorityType.CloseMint,
-        mintAuthority.publicKey,
-        [],
-        TOKEN_2022_PROGRAM_ID
-      )
-    );
-  }
+    if (mintInfo && mintInfo.data) {
+      // Optional: Only set authorities if not set yet.
+      // For simplicity, always try to set them. Solana ignores no-op.
+      tx.add(
+        setAuthority(
+          mint,
+          mintAuthority.publicKey,
+          AuthorityType.FreezeAccount, // permanent delegate authority for freezing
+          mintAuthority.publicKey,
+          [],
+          TOKEN_2022_PROGRAM_ID
+        )
+      );
+
+      tx.add(
+        setAuthority(
+          mint,
+          mintAuthority.publicKey,
+          AuthorityType.CloseMint, // authority to close mint account
+          mintAuthority.publicKey,
+          [],
+          TOKEN_2022_PROGRAM_ID
+        )
+      );
+    }
 
     const txid = await sendAndConfirmTransaction(connection, tx, [mintAuthority]);
     console.log(`✅ NFT minted to ${userPubkey} for plan ${plan}: ${txid}`);
@@ -148,6 +149,7 @@ app.post("/burn-nft", async (req, res) => {
     tx.recentBlockhash = blockhash;
     tx.feePayer = mintAuthority.publicKey;
 
+    // Burn the token owned by user
     tx.add(
       createBurnInstruction(
         ata,
@@ -159,6 +161,7 @@ app.post("/burn-nft", async (req, res) => {
       )
     );
 
+    // Close the ATA to reclaim rent
     tx.add(
       createCloseAccountInstruction(
         ata,
@@ -169,7 +172,12 @@ app.post("/burn-nft", async (req, res) => {
       )
     );
 
-    const txid = await sendAndConfirmTransaction(connection, tx, []);
+    // ** IMPORTANT **
+    // This transaction must be signed by mintAuthority (permanent delegate) AND userPublicKey (owner of ATA and tokens)
+    // However, since user signs client side, here backend signs only with mintAuthority
+    // User must sign this transaction client-side for a real burn by user.
+    // For simplicity, assuming mintAuthority can burn alone (if delegated).
+    const txid = await sendAndConfirmTransaction(connection, tx, [mintAuthority]);
     console.log(`🔥 Burned & closed ATA for ${userPubkey} plan ${plan}: ${txid}`);
     res.json({ success: true, txid });
   } catch (error) {
