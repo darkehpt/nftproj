@@ -173,22 +173,32 @@ const App = () => {
     if (loading) return;
 
     setLoading(true);
-    setStatus("⏳ Requesting burn from backend...");
+    setStatus("⏳ Burning NFT...");
 
     try {
-      const res = await fetch("https://nftproj.onrender.com/burn-nft", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userPubkey: wallet.publicKey.toBase58(), plan }),
-      });
-      const data = await res.json();
+      const tx = new Transaction();
+      const { blockhash } = await CONNECTION.getLatestBlockhash();
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = wallet.publicKey;
 
-      if (data.success) {
-        setStatus(`🔥 NFT burned successfully! Tx: ${data.txid}`);
-      } else {
-        throw new Error(data.error || "Burn failed");
-      }
+      const mint = NFT_MINTS[plan];
+      const ata = await getOrCreateATA(CONNECTION, mint, wallet.publicKey, wallet.publicKey, tx, TOKEN_2022_PROGRAM_ID);
 
+      const burnIx = createBurnInstruction(
+        ata,
+        mint,
+        wallet.publicKey,
+        1,
+        [],
+        TOKEN_2022_PROGRAM_ID
+      );
+      tx.add(burnIx);
+
+      const signedTx = await wallet.signTransaction(tx);
+      const txid = await CONNECTION.sendRawTransaction(signedTx.serialize());
+      await CONNECTION.confirmTransaction(txid, "confirmed");
+
+      setStatus(`🔥 NFT burned successfully! Tx: ${txid}`);
       await fetchNftBalance();
     } catch (err) {
       console.error(err);
