@@ -94,10 +94,10 @@ app.post("/mint-nft", async (req, res) => {
     );
 
     // Set authorities
+    // Set authorities (Only valid authority types for a Mint)
     const authorityTypes = [
       AuthorityType.MintTokens,
-      AuthorityType.BurnTokens,
-      AuthorityType.CloseAccount,
+      AuthorityType.BurnTokens, // Optional: Allows admin to burn
     ];
 
     authorityTypes.forEach((type) => {
