@@ -17,7 +17,7 @@ import {
   createMintToInstruction,
   createBurnInstruction,
   createCloseAccountInstruction,
-  setAuthority,
+  createSetAuthorityInstruction,
   AuthorityType,
   TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
@@ -36,7 +36,7 @@ const NFT_MINTS = {
 };
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: "*" }));
 app.use(express.json());
 
 app.get("/", (req, res) => {
@@ -56,8 +56,8 @@ async function getOrCreateATA(connection, mint, owner, payer) {
         TOKEN_2022_PROGRAM_ID
       )
     );
-    const blockhash = await connection.getLatestBlockhash();
-    tx.recentBlockhash = blockhash.blockhash;
+    const { blockhash } = await connection.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
     tx.feePayer = payer.publicKey;
     tx.sign(payer);
     const rawTx = tx.serialize();
@@ -79,7 +79,10 @@ app.post("/mint-nft", async (req, res) => {
     const mint = NFT_MINTS[plan];
     const ata = await getOrCreateATA(connection, mint, userPublicKey, mintAuthority);
 
-    const tx = new Transaction().add(
+    const tx = new Transaction();
+
+    // Mint 1 token
+    tx.add(
       createMintToInstruction(
         mint,
         ata,
@@ -87,37 +90,34 @@ app.post("/mint-nft", async (req, res) => {
         1,
         [],
         TOKEN_2022_PROGRAM_ID
-      ),
-      setAuthority(
-        mint,
-        mintAuthority.publicKey,
-        AuthorityType.MintTokens,
-        mintAuthority.publicKey,
-        [],
-        TOKEN_2022_PROGRAM_ID
-      ),
-      setAuthority(
-        mint,
-        mintAuthority.publicKey,
-        AuthorityType.BurnTokens,
-        mintAuthority.publicKey,
-        [],
-        TOKEN_2022_PROGRAM_ID
-      ),
-      setAuthority(
-        mint,
-        mintAuthority.publicKey,
-        AuthorityType.CloseAccount,
-        mintAuthority.publicKey,
-        [],
-        TOKEN_2022_PROGRAM_ID
       )
     );
+
+    // Set authorities
+    const authorityTypes = [
+      AuthorityType.MintTokens,
+      AuthorityType.BurnTokens,
+      AuthorityType.CloseAccount,
+    ];
+
+    authorityTypes.forEach((type) => {
+      tx.add(
+        createSetAuthorityInstruction(
+          mint,
+          mintAuthority.publicKey,
+          type,
+          mintAuthority.publicKey,
+          [],
+          TOKEN_2022_PROGRAM_ID
+        )
+      );
+    });
 
     const { blockhash } = await connection.getLatestBlockhash();
     tx.recentBlockhash = blockhash;
     tx.feePayer = mintAuthority.publicKey;
     tx.sign(mintAuthority);
+
     const rawTx = tx.serialize();
     const signature = await connection.sendRawTransaction(rawTx);
     await connection.confirmTransaction(signature, "confirmed");
@@ -142,7 +142,10 @@ app.post("/burn-nft", async (req, res) => {
     const mint = NFT_MINTS[plan];
     const ata = await getAssociatedTokenAddress(mint, userPublicKey, false, TOKEN_2022_PROGRAM_ID);
 
-    const tx = new Transaction().add(
+    const tx = new Transaction();
+
+    // Burn 1 token (admin-initiated)
+    tx.add(
       createBurnInstruction(
         ata,
         mint,
@@ -150,7 +153,11 @@ app.post("/burn-nft", async (req, res) => {
         1,
         [],
         TOKEN_2022_PROGRAM_ID
-      ),
+      )
+    );
+
+    // Close ATA
+    tx.add(
       createCloseAccountInstruction(
         ata,
         userPublicKey,
@@ -164,6 +171,7 @@ app.post("/burn-nft", async (req, res) => {
     tx.recentBlockhash = blockhash;
     tx.feePayer = mintAuthority.publicKey;
     tx.sign(mintAuthority);
+
     const rawTx = tx.serialize();
     const signature = await connection.sendRawTransaction(rawTx);
     await connection.confirmTransaction(signature, "confirmed");
