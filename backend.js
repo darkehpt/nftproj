@@ -2,90 +2,84 @@
 
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import {
   Connection,
+  Keypair,
   PublicKey,
   Transaction,
+  sendAndConfirmTransaction,
   clusterApiUrl,
-  Keypair,
 } from "@solana/web3.js";
-
 import {
-  getAssociatedTokenAddress,
-  createAssociatedTokenAccountInstruction,
+  createMint,
+  getOrCreateAssociatedTokenAccount,
   createMintToInstruction,
   createBurnInstruction,
-  createCloseAccountInstruction,
-  // createSetAuthorityInstruction,
-  // AuthorityType,
+  createApproveInstruction,
   TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
+import bs58 from "bs58";
+import dotenv from "dotenv";
 
 dotenv.config();
 
-const mintAuthoritySecret = JSON.parse(process.env.MINT_AUTHORITY_SECRET);
-const mintAuthority = Keypair.fromSecretKey(new Uint8Array(mintAuthoritySecret));
+const app = express();
+app.use(cors());
+app.use(express.json());
 
 const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
 
-const NFT_MINTS = {
-  "10GB": new PublicKey("GXsBcsscLxMRKLgwWWnKkUzuXdEXwr74NiSqJrBs21Mz"),
-  "25GB": new PublicKey("HDtzBt6nvoHLhiV8KLrovhnP4pYesguq89J2vZZbn6kA"),
-  "50GB": new PublicKey("C6is6ajmWgySMA4WpDfccadLf5JweXVufdXexWNrLKKD"),
-};
-
-const app = express();
-app.use(cors({ origin: "*" }));
-app.use(express.json());
-
-app.get("/", (req, res) => {
-  res.send("✅ Mint backend running");
-});
-
-async function getOrCreateATA(connection, mint, owner, payer) {
-  const ata = await getAssociatedTokenAddress(mint, owner, false, TOKEN_2022_PROGRAM_ID);
-  const info = await connection.getAccountInfo(ata);
-  if (!info) {
-    const tx = new Transaction().add(
-      createAssociatedTokenAccountInstruction(
-        payer.publicKey,
-        ata,
-        owner,
-        mint,
-        TOKEN_2022_PROGRAM_ID
-      )
-    );
-    const { blockhash } = await connection.getLatestBlockhash();
-    tx.recentBlockhash = blockhash;
-    tx.feePayer = payer.publicKey;
-    tx.sign(payer);
-    const rawTx = tx.serialize();
-    await connection.sendRawTransaction(rawTx);
-    console.log(`Created ATA for ${owner.toBase58()}`);
-  }
-  return ata;
+// Load backend wallet from secret key
+const secret = process.env.PRIVATE_KEY;
+if (!secret) {
+  throw new Error("PRIVATE_KEY not found in .env file");
 }
+const mintAuthority = Keypair.fromSecretKey(bs58.decode(secret));
 
-// === MINT ===
+console.log("Backend authority pubkey:", mintAuthority.publicKey.toBase58());
+
+// ✅ Mint NFT and approve self as delegate
 app.post("/mint-nft", async (req, res) => {
   try {
-    const { userPubkey, plan } = req.body;
-    if (!userPubkey || !plan || !NFT_MINTS[plan]) {
-      return res.status(400).json({ error: "Invalid request" });
-    }
+    const { user } = req.body;
+    if (!user) throw new Error("Missing 'user' in request body");
 
-    const userPublicKey = new PublicKey(userPubkey);
-    const mint = NFT_MINTS[plan];
-    const ata = await getOrCreateATA(connection, mint, userPublicKey, mintAuthority);
+    const userPublicKey = new PublicKey(user);
 
+    // Create Token-2022 Mint (0 decimals = NFT)
+    const mint = await createMint(
+      connection,
+      mintAuthority,
+      mintAuthority.publicKey,
+      null,
+      0,
+      undefined,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
+
+    console.log("✅ Mint created:", mint.toBase58());
+
+    // Get/Create user's ATA for this mint
+    const ata = await getOrCreateAssociatedTokenAccount(
+      connection,
+      mintAuthority,
+      mint,
+      userPublicKey,
+      true,
+      undefined,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
+
+    // Create TX to mint and approve delegate
     const tx = new Transaction();
 
     // Mint 1 token to user's ATA
     tx.add(
       createMintToInstruction(
         mint,
-        ata,
+        ata.address,
         mintAuthority.publicKey,
         1,
         [],
@@ -93,87 +87,74 @@ app.post("/mint-nft", async (req, res) => {
       )
     );
 
-    // NOTE: Setting mint authorities (mint, burn, freeze) is usually done once by the mint creator,
-    // not on every mint call. So it's commented out here.
-    // If you want to set authorities, do it separately, carefully.
+    // ✅ Approve self (backend) as delegate to burn later
+    tx.add(
+      createApproveInstruction(
+        ata.address,
+        mintAuthority.publicKey, // Delegate
+        mintAuthority.publicKey, // Owner/Approver
+        1,
+        [],
+        TOKEN_2022_PROGRAM_ID
+      )
+    );
 
-    const { blockhash } = await connection.getLatestBlockhash();
-    tx.recentBlockhash = blockhash;
-    tx.feePayer = mintAuthority.publicKey;
-    tx.sign(mintAuthority);
+    // Send TX
+    const sig = await sendAndConfirmTransaction(connection, tx, [mintAuthority]);
 
-    const rawTx = tx.serialize();
-    const signature = await connection.sendRawTransaction(rawTx);
-    await connection.confirmTransaction(signature, "confirmed");
+    console.log("✅ Minted and delegate approved in tx:", sig);
 
-    console.log(`✅ Minted ${plan} NFT to ${userPubkey}: ${signature}`);
-    res.json({ success: true, txid: signature });
+    return res.json({ mint: mint.toBase58(), ata: ata.address.toBase58(), sig });
   } catch (err) {
     console.error("❌ Mint error:", err);
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 });
 
-// === ADMIN BURN ===
-// Use backend's mintAuthority as delegate to burn user's NFT without user signature
+// 🔥 Burn NFT (assumes delegate authority set)
 app.post("/burn-nft", async (req, res) => {
   try {
-    const { userPubkey, plan } = req.body;
-    if (!userPubkey || !plan || !NFT_MINTS[plan]) {
-      return res.status(400).json({ error: "Invalid request" });
-    }
+    const { mint, user } = req.body;
+    if (!mint || !user) throw new Error("Missing 'mint' or 'user' in request body");
 
-    const userPublicKey = new PublicKey(userPubkey);
-    const mint = NFT_MINTS[plan];
-    const ata = await getAssociatedTokenAddress(mint, userPublicKey, false, TOKEN_2022_PROGRAM_ID);
+    const mintKey = new PublicKey(mint);
+    const userKey = new PublicKey(user);
 
-    const tx = new Transaction();
+    // Find the user's ATA
+    const ata = await getOrCreateAssociatedTokenAccount(
+      connection,
+      mintAuthority,
+      mintKey,
+      userKey,
+      true,
+      undefined,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
 
-    // Burn 1 token from user's ATA (as delegated authority)
-    tx.add(
+    // Burn instruction
+    const tx = new Transaction().add(
       createBurnInstruction(
-        ata,
-        mint,
-        mintAuthority.publicKey,
+        ata.address,
+        mintKey,
+        mintAuthority.publicKey, // Delegate (us)
         1,
         [],
         TOKEN_2022_PROGRAM_ID
       )
     );
 
-    // Close the ATA (returns SOL to user)
-    tx.add(
-      createCloseAccountInstruction(
-        ata,
-        userPublicKey,
-        mintAuthority.publicKey,
-        [],
-        TOKEN_2022_PROGRAM_ID
-      )
-    );
+    const sig = await sendAndConfirmTransaction(connection, tx, [mintAuthority]);
 
-    const { blockhash } = await connection.getLatestBlockhash();
-    tx.recentBlockhash = blockhash;
-    tx.feePayer = mintAuthority.publicKey;
-    tx.sign(mintAuthority);
-
-    const rawTx = tx.serialize();
-    const signature = await connection.sendRawTransaction(rawTx);
-    await connection.confirmTransaction(signature, "confirmed");
-
-    console.log(`🔥 Admin burned NFT for ${userPubkey} [${plan}]: ${signature}`);
-    res.json({ success: true, txid: signature });
+    console.log("🔥 Burned NFT in tx:", sig);
+    return res.json({ sig });
   } catch (err) {
     console.error("❌ Burn error:", err);
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 });
 
-const PORT = 4000;
-app.listen(PORT, () => {
-  console.log(`✅ Backend listening at http://localhost:${PORT}`);
+// Start server
+app.listen(3000, () => {
+  console.log("🚀 Server running on http://localhost:3000");
 });
-
-setInterval(() => {
-  console.log(`[heartbeat] Alive at ${new Date().toISOString()}`);
-}, 15000);
