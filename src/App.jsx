@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import "./index.css";
+import App from './App.jsx';
 import {
   Connection,
   PublicKey,
