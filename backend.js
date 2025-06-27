@@ -12,7 +12,6 @@ import {
 
 import {
   getAssociatedTokenAddress,
-  getAccount,
   createTransferInstruction,
   createBurnInstruction,
   createAssociatedTokenAccountInstruction,
@@ -25,27 +24,31 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// CORS + JSON parsing
-app.use(cors());
+// ✅ CORS + JSON parsing
+app.use(cors({
+  origin: "https://nftproj-frans-projects-d13b4cab.vercel.app",
+  methods: ["POST"],
+  allowedHeaders: ["Content-Type"],
+}));
 app.use(express.json());
 
 const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
 
-// Load backend wallet from env-stored secret key array
-const SECRET_KEY = JSON.parse(process.env.MINT_AUTHORITY_SECRET); // e.g. "[12,34,56,...]"
+// 🔐 Load backend wallet
+const SECRET_KEY = JSON.parse(process.env.MINT_AUTHORITY_SECRET);
 const BACKEND_WALLET = Keypair.fromSecretKey(Uint8Array.from(SECRET_KEY));
 const BACKEND_AUTHORITY = BACKEND_WALLET.publicKey;
 
 console.log("✅ Backend wallet:", BACKEND_AUTHORITY.toBase58());
 
-// Fixed NFT mints
+// 🎯 Predefined NFT mint addresses
 const NFT_MINTS = {
   "10GB": new PublicKey("GXsBcsscLxMRKLgwWWnKkUzuXdEXwr74NiSqJrBs21Mz"),
   "25GB": new PublicKey("HDtzBt6nvoHLhiV8KLrovhnP4pYesguq89J2vZZbn6kA"),
   "50GB": new PublicKey("C6is6ajmWgySMA4WpDfccadLf5JweXVufdXexWNrLKKD"),
 };
 
-// Mint endpoint: transfers 1 NFT from backend wallet to user
+// 🚀 Mint NFT
 app.post("/mint-nft", async (req, res) => {
   try {
     const { userPubkey, plan } = req.body;
@@ -56,20 +59,8 @@ app.post("/mint-nft", async (req, res) => {
     const user = new PublicKey(userPubkey);
     const mint = NFT_MINTS[plan];
 
-    const backendAta = await getAssociatedTokenAddress(
-      mint,
-      BACKEND_AUTHORITY,
-      false,
-      TOKEN_2022_PROGRAM_ID
-    );
-
-    const userAta = await getAssociatedTokenAddress(
-      mint,
-      user,
-      false,
-      TOKEN_2022_PROGRAM_ID
-    );
-
+    const backendAta = await getAssociatedTokenAddress(mint, BACKEND_AUTHORITY, false, TOKEN_2022_PROGRAM_ID);
+    const userAta = await getAssociatedTokenAddress(mint, user, false, TOKEN_2022_PROGRAM_ID);
     const userAtaInfo = await connection.getAccountInfo(userAta);
 
     const tx = new Transaction();
@@ -106,7 +97,7 @@ app.post("/mint-nft", async (req, res) => {
   }
 });
 
-// Burn NFT endpoint
+// 🔥 Burn NFT
 app.post("/burn-nft", async (req, res) => {
   try {
     const { userPubkey, plan } = req.body;
@@ -117,12 +108,7 @@ app.post("/burn-nft", async (req, res) => {
     const user = new PublicKey(userPubkey);
     const mint = NFT_MINTS[plan];
 
-    const userAta = await getAssociatedTokenAddress(
-      mint,
-      user,
-      false,
-      TOKEN_2022_PROGRAM_ID
-    );
+    const userAta = await getAssociatedTokenAddress(mint, user, false, TOKEN_2022_PROGRAM_ID);
 
     const tx = new Transaction().add(
       createBurnInstruction(
