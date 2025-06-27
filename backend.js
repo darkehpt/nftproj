@@ -57,7 +57,7 @@ console.log("✅ Backend authority pubkey:", mintAuthority.publicKey.toBase58())
  */
 app.post("/mint-nft", async (req, res) => {
   try {
-    const { user } = req.body;
+    const { userPubkey: user } = req.body;
     if (!user) throw new Error("Missing 'user' in request body");
 
     const userPublicKey = new PublicKey(user);
