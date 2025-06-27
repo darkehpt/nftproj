@@ -1,6 +1,6 @@
-// backend.js
 import express from "express";
 import cors from "cors";
+import dotenv from "dotenv";
 import {
   Connection,
   Keypair,
@@ -16,82 +16,79 @@ import {
   createBurnInstruction,
   createApproveInstruction,
   getAccount,
+  createTransferInstruction,
   TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
-import dotenv from "dotenv";
 
 dotenv.config();
-
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Log all request bodies for debugging
+// ✅ Log requests for debugging
 app.use((req, res, next) => {
-  console.log("📩 Incoming request:", req.method, req.path);
+  console.log("📩 Request:", req.method, req.path);
   console.log("📦 Body:", req.body);
   next();
 });
 
 const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
 
-// ✅ Load backend wallet from environment variable as JSON array
+// ✅ Load backend wallet
 const secretRaw = process.env.MINT_AUTHORITY_SECRET;
-if (!secretRaw) {
-  throw new Error("MINT_AUTHORITY_SECRET not found in environment");
-}
+if (!secretRaw) throw new Error("MINT_AUTHORITY_SECRET not found");
 
 let secretArray;
 try {
   secretArray = JSON.parse(secretRaw);
   if (!Array.isArray(secretArray)) throw new Error();
 } catch {
-  throw new Error("MINT_AUTHORITY_SECRET must be a valid JSON array string (e.g. [123, 34, ...])");
+  throw new Error("MINT_AUTHORITY_SECRET must be a valid JSON array");
 }
 
 const mintAuthority = Keypair.fromSecretKey(Uint8Array.from(secretArray));
-console.log("✅ Backend authority pubkey:", mintAuthority.publicKey.toBase58());
+console.log("✅ Backend wallet:", mintAuthority.publicKey.toBase58());
 
 /**
- * ✅ Mint a Token-2022 NFT to user
+ * ✅ Mint NFT to backend and transfer to user with delegate approval
  */
 app.post("/mint-nft", async (req, res) => {
   try {
-    const { userPubkey: user } = req.body;
-    if (!user) throw new Error("Missing 'user' in request body");
+    const { userPubkey } = req.body;
+    if (!userPubkey) throw new Error("Missing 'userPubkey' in request body");
 
-    const userPublicKey = new PublicKey(user);
+    const user = new PublicKey(userPubkey);
 
+    // 1️⃣ Create mint
     const mint = await createMint(
       connection,
       mintAuthority,
       mintAuthority.publicKey,
       mintAuthority.publicKey,
-      0,
+      0, // decimals = 0
       undefined,
       undefined,
       TOKEN_2022_PROGRAM_ID
     );
-
     console.log("✅ Mint created:", mint.toBase58());
 
-    const ata = await getOrCreateAssociatedTokenAccount(
+    // 2️⃣ Get backend ATA (temp holder of NFT)
+    const backendATA = await getOrCreateAssociatedTokenAccount(
       connection,
       mintAuthority,
       mint,
-      userPublicKey,
+      mintAuthority.publicKey,
       true,
       undefined,
       undefined,
       TOKEN_2022_PROGRAM_ID
     );
 
-    const tx = new Transaction();
-
-    tx.add(
+    // 3️⃣ Mint NFT to backend
+    const tx1 = new Transaction().add(
       createMintToInstruction(
         mint,
-        ata.address,
+        backendATA.address,
         mintAuthority.publicKey,
         1,
         [],
@@ -99,24 +96,47 @@ app.post("/mint-nft", async (req, res) => {
       )
     );
 
-    tx.add(
+    await sendAndConfirmTransaction(connection, tx1, [mintAuthority]);
+    console.log("✅ NFT minted to backend ATA");
+
+    // 4️⃣ Get or create user's ATA
+    const userATA = await getOrCreateAssociatedTokenAccount(
+      connection,
+      mintAuthority,
+      mint,
+      user,
+      true,
+      undefined,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
+
+    // 5️⃣ Transfer NFT to user
+    const tx2 = new Transaction().add(
+      createTransferInstruction(
+        backendATA.address,
+        userATA.address,
+        mintAuthority.publicKey,
+        1,
+        [],
+        TOKEN_2022_PROGRAM_ID
+      ),
       createApproveInstruction(
-        ata.address,
+        userATA.address,
         mintAuthority.publicKey, // delegate
-        mintAuthority.publicKey, // authority (us)
+        mintAuthority.publicKey, // authority (self approval)
         1,
         [],
         TOKEN_2022_PROGRAM_ID
       )
     );
 
-    const sig = await sendAndConfirmTransaction(connection, tx, [mintAuthority]);
-
-    console.log("✅ Minted + delegate approved in tx:", sig);
+    const sig = await sendAndConfirmTransaction(connection, tx2, [mintAuthority]);
+    console.log("✅ NFT transferred to user + delegate approved:", sig);
 
     return res.json({
       mint: mint.toBase58(),
-      ata: ata.address.toBase58(),
+      ata: userATA.address.toBase58(),
       sig,
     });
   } catch (err) {
@@ -126,7 +146,7 @@ app.post("/mint-nft", async (req, res) => {
 });
 
 /**
- * 🔥 Burn NFT
+ * 🔥 Burn NFT from user's wallet as delegate
  */
 app.post("/burn-nft", async (req, res) => {
   try {
@@ -136,7 +156,7 @@ app.post("/burn-nft", async (req, res) => {
     const mintKey = new PublicKey(mint);
     const userKey = new PublicKey(user);
 
-    const ata = await getOrCreateAssociatedTokenAccount(
+    const userATA = await getOrCreateAssociatedTokenAccount(
       connection,
       mintAuthority,
       mintKey,
@@ -149,22 +169,23 @@ app.post("/burn-nft", async (req, res) => {
 
     const tokenAccount = await getAccount(
       connection,
-      ata.address,
+      userATA.address,
       "confirmed",
       TOKEN_2022_PROGRAM_ID
     );
 
+    console.log("🔍 Checking delegation...");
     if (
       !tokenAccount.delegate ||
       !tokenAccount.delegate.equals(mintAuthority.publicKey) ||
       tokenAccount.delegatedAmount < 1
     ) {
-      throw new Error("Backend is not delegate or has no allowance to burn");
+      throw new Error("Backend not delegate or no allowance to burn");
     }
 
     const tx = new Transaction().add(
       createBurnInstruction(
-        ata.address,
+        userATA.address,
         mintKey,
         mintAuthority.publicKey,
         1,
@@ -174,8 +195,8 @@ app.post("/burn-nft", async (req, res) => {
     );
 
     const sig = await sendAndConfirmTransaction(connection, tx, [mintAuthority]);
-
     console.log("🔥 Burned NFT in tx:", sig);
+
     return res.json({ sig });
   } catch (err) {
     console.error("❌ Burn error:", err);
@@ -186,5 +207,5 @@ app.post("/burn-nft", async (req, res) => {
 // 🚀 Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`🚀 Server live at http://localhost:${PORT}`);
 });
