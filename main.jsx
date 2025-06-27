@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import AppWrapper from "./App"; // Import the wrapper, not the bare App
+import AppWrapper from "./App";
 import "@solana/wallet-adapter-react-ui/styles.css";
 import { Buffer } from "buffer";
 window.Buffer = Buffer;
