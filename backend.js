@@ -26,6 +26,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Log all request bodies for debugging
+app.use((req, res, next) => {
+  console.log("📩 Incoming request:", req.method, req.path);
+  console.log("📦 Body:", req.body);
+  next();
+});
+
 const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
 
 // ✅ Load backend wallet from environment variable as JSON array
@@ -37,12 +44,12 @@ if (!secretRaw) {
 let secretArray;
 try {
   secretArray = JSON.parse(secretRaw);
-} catch (e) {
-  throw new Error("MINT_AUTHORITY_SECRET must be a JSON array string (e.g. [123, 34, ...])");
+  if (!Array.isArray(secretArray)) throw new Error();
+} catch {
+  throw new Error("MINT_AUTHORITY_SECRET must be a valid JSON array string (e.g. [123, 34, ...])");
 }
 
 const mintAuthority = Keypair.fromSecretKey(Uint8Array.from(secretArray));
-
 console.log("✅ Backend authority pubkey:", mintAuthority.publicKey.toBase58());
 
 /**
@@ -95,8 +102,8 @@ app.post("/mint-nft", async (req, res) => {
     tx.add(
       createApproveInstruction(
         ata.address,
-        mintAuthority.publicKey,
-        mintAuthority.publicKey,
+        mintAuthority.publicKey, // delegate
+        mintAuthority.publicKey, // authority (us)
         1,
         [],
         TOKEN_2022_PROGRAM_ID
@@ -124,7 +131,7 @@ app.post("/mint-nft", async (req, res) => {
 app.post("/burn-nft", async (req, res) => {
   try {
     const { mint, user } = req.body;
-    if (!mint || !user) throw new Error("Missing 'mint' or 'user'");
+    if (!mint || !user) throw new Error("Missing 'mint' or 'user' in request body");
 
     const mintKey = new PublicKey(mint);
     const userKey = new PublicKey(user);
@@ -140,7 +147,12 @@ app.post("/burn-nft", async (req, res) => {
       TOKEN_2022_PROGRAM_ID
     );
 
-    const tokenAccount = await getAccount(connection, ata.address, "confirmed", TOKEN_2022_PROGRAM_ID);
+    const tokenAccount = await getAccount(
+      connection,
+      ata.address,
+      "confirmed",
+      TOKEN_2022_PROGRAM_ID
+    );
 
     if (
       !tokenAccount.delegate ||
