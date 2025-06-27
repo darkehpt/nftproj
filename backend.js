@@ -14,6 +14,7 @@ import {
   getOrCreateAssociatedTokenAccount,
   createMintToInstruction,
   createBurnInstruction,
+  createApproveInstruction,
   getAccount,
   TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
@@ -28,10 +29,10 @@ app.use(express.json());
 
 const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
 
-// Load backend wallet from secret key
-const secret = process.env.PRIVATE_KEY;
+// ✅ Load backend wallet from environment variable
+const secret = process.env.MINT_AUTHORITY_SECRET;
 if (!secret) {
-  throw new Error("PRIVATE_KEY not found in .env file");
+  throw new Error("MINT_AUTHORITY_SECRET not found in environment");
 }
 const mintAuthority = Keypair.fromSecretKey(bs58.decode(secret));
 
@@ -39,97 +40,92 @@ console.log("✅ Backend authority pubkey:", mintAuthority.publicKey.toBase58())
 
 /**
  * ✅ Mint a Token-2022 NFT to user
- * Note: Does NOT set backend as delegate — user must do this on frontend.
+ * Automatically sets backend as close authority and delegate
  */
- app.post("/mint-nft", async (req, res) => {
-   try {
-     const { user } = req.body;
-     if (!user) throw new Error("Missing 'user' in request body");
+app.post("/mint-nft", async (req, res) => {
+  try {
+    const { user } = req.body;
+    if (!user) throw new Error("Missing 'user' in request body");
 
-     const userPublicKey = new PublicKey(user);
+    const userPublicKey = new PublicKey(user);
 
-     // Create Token-2022 Mint (0 decimals = NFT) with backend as mint + close authority
-     const mint = await createMint(
-       connection,
-       mintAuthority,
-       mintAuthority.publicKey, // mint authority
-       mintAuthority.publicKey, // ✅ set backend as close authority too
-       0,
-       undefined,
-       undefined,
-       TOKEN_2022_PROGRAM_ID
-     );
+    // Create NFT mint
+    const mint = await createMint(
+      connection,
+      mintAuthority,
+      mintAuthority.publicKey,
+      mintAuthority.publicKey,
+      0,
+      undefined,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
 
-     console.log("✅ Mint created:", mint.toBase58());
+    console.log("✅ Mint created:", mint.toBase58());
 
-     // Get/Create user's ATA for this mint
-     const ata = await getOrCreateAssociatedTokenAccount(
-       connection,
-       mintAuthority,
-       mint,
-       userPublicKey,
-       true,
-       undefined,
-       undefined,
-       TOKEN_2022_PROGRAM_ID
-     );
+    // Create ATA
+    const ata = await getOrCreateAssociatedTokenAccount(
+      connection,
+      mintAuthority,
+      mint,
+      userPublicKey,
+      true,
+      undefined,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
 
-     // ✅ Mint + Approve backend as delegate in one transaction
-     const tx = new Transaction();
+    // Mint + approve delegate in one tx
+    const tx = new Transaction();
 
-     // Mint 1 token to user's ATA
-     tx.add(
-       createMintToInstruction(
-         mint,
-         ata.address,
-         mintAuthority.publicKey,
-         1,
-         [],
-         TOKEN_2022_PROGRAM_ID
-       )
-     );
+    tx.add(
+      createMintToInstruction(
+        mint,
+        ata.address,
+        mintAuthority.publicKey,
+        1,
+        [],
+        TOKEN_2022_PROGRAM_ID
+      )
+    );
 
-     // ✅ Approve backend as delegate with full authority to burn (allowance = 1)
-     tx.add(
-       createApproveInstruction(
-         ata.address,
-         mintAuthority.publicKey, // delegate (us)
-         userPublicKey, // owner (user must sign, but we bypass since we're minting for them)
-         1,
-         [],
-         TOKEN_2022_PROGRAM_ID
-       )
-     );
+    tx.add(
+      createApproveInstruction(
+        ata.address,
+        mintAuthority.publicKey, // delegate (backend)
+        mintAuthority.publicKey, // authority (since backend owns mint)
+        1,
+        [],
+        TOKEN_2022_PROGRAM_ID
+      )
+    );
 
-     // Send TX (only mintAuthority signs, user doesn't need to sign)
-     const sig = await sendAndConfirmTransaction(connection, tx, [mintAuthority]);
+    const sig = await sendAndConfirmTransaction(connection, tx, [mintAuthority]);
 
-     console.log("✅ Minted and delegate approved in tx:", sig);
+    console.log("✅ Minted + delegate approved in tx:", sig);
 
-     return res.json({
-       mint: mint.toBase58(),
-       ata: ata.address.toBase58(),
-       sig,
-     });
-   } catch (err) {
-     console.error("❌ Mint error:", err);
-     return res.status(500).json({ error: err.message });
-   }
- });
+    return res.json({
+      mint: mint.toBase58(),
+      ata: ata.address.toBase58(),
+      sig,
+    });
+  } catch (err) {
+    console.error("❌ Mint error:", err);
+    return res.status(500).json({ error: err.message });
+  }
+});
 
 /**
  * 🔥 Burn NFT
- * Requires that user has previously approved backend as delegate via frontend.
  */
 app.post("/burn-nft", async (req, res) => {
   try {
     const { mint, user } = req.body;
-    if (!mint || !user) throw new Error("Missing 'mint' or 'user' in request body");
+    if (!mint || !user) throw new Error("Missing 'mint' or 'user'");
 
     const mintKey = new PublicKey(mint);
     const userKey = new PublicKey(user);
 
-    // Get user's ATA
     const ata = await getOrCreateAssociatedTokenAccount(
       connection,
       mintAuthority,
@@ -141,7 +137,6 @@ app.post("/burn-nft", async (req, res) => {
       TOKEN_2022_PROGRAM_ID
     );
 
-    // 🛡️ Confirm backend is approved delegate
     const tokenAccount = await getAccount(connection, ata.address, "confirmed", TOKEN_2022_PROGRAM_ID);
 
     if (
@@ -149,17 +144,14 @@ app.post("/burn-nft", async (req, res) => {
       !tokenAccount.delegate.equals(mintAuthority.publicKey) ||
       tokenAccount.delegatedAmount < 1
     ) {
-      throw new Error(
-        "Backend wallet is NOT approved delegate for this token account. User must approve via frontend first."
-      );
+      throw new Error("Backend is not delegate or has no allowance to burn");
     }
 
-    // 🔥 Burn instruction
     const tx = new Transaction().add(
       createBurnInstruction(
         ata.address,
         mintKey,
-        mintAuthority.publicKey, // Delegate
+        mintAuthority.publicKey,
         1,
         [],
         TOKEN_2022_PROGRAM_ID
@@ -176,7 +168,8 @@ app.post("/burn-nft", async (req, res) => {
   }
 });
 
-// 🚀 Start server
-app.listen(3000, () => {
-  console.log("🚀 Server running on http://localhost:3000");
+// Start server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
