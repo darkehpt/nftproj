@@ -11,7 +11,6 @@ import {
 } from "@solana/web3.js";
 import {
   getOrCreateAssociatedTokenAccount,
-  createMintToInstruction,
   createBurnInstruction,
   createApproveInstruction,
   getAccount,
@@ -21,10 +20,30 @@ import {
 
 dotenv.config();
 const app = express();
-app.use(cors());
+
+// CORS Setup: Allow your frontend origins
+const allowedOrigins = [
+  "http://localhost:3000", // local dev frontend
+  "https://nftproj-frans-projects-d13b4cab.vercel.app", // deployed frontend
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true); // allow REST tools or curl
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = `CORS policy: Origin ${origin} not allowed`;
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type"],
+}));
+app.options("*", cors()); // enable pre-flight
+
 app.use(express.json());
 
-// ✅ Log requests for debugging
+// Log requests for debugging
 app.use((req, res, next) => {
   console.log("📩 Request:", req.method, req.path);
   console.log("📦 Body:", req.body);
@@ -33,7 +52,7 @@ app.use((req, res, next) => {
 
 const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
 
-// ✅ Load backend wallet
+// Load backend wallet from env secret
 const secretRaw = process.env.MINT_AUTHORITY_SECRET;
 if (!secretRaw) throw new Error("MINT_AUTHORITY_SECRET not found");
 
@@ -56,12 +75,12 @@ const PREDEFINED_MINTS = {
 };
 
 /**
- * ✅ Mint NFT to backend ATA and transfer to user ATA
+ * Transfer 1 token from backend ATA to user ATA
  */
 app.post("/mint-nft", async (req, res) => {
   try {
     const { userPubkey, plan } = req.body;
-    if (!userPubkey) throw new Error("Missing 'userPubkey' in request body");
+    if (!userPubkey) throw new Error("Missing 'userPubkey'");
     if (!plan || !PREDEFINED_MINTS[plan]) throw new Error("Invalid or missing 'plan'");
 
     const user = new PublicKey(userPubkey);
@@ -79,21 +98,7 @@ app.post("/mint-nft", async (req, res) => {
       TOKEN_2022_PROGRAM_ID
     );
 
-    // 2️⃣ Mint 1 token to backend ATA
-    const mintTx = new Transaction().add(
-      createMintToInstruction(
-        mint,
-        backendATA.address,
-        mintAuthority.publicKey,
-        1,
-        [],
-        TOKEN_2022_PROGRAM_ID
-      )
-    );
-    await sendAndConfirmTransaction(connection, mintTx, [mintAuthority]);
-    console.log("✅ NFT minted to backend ATA");
-
-    // 3️⃣ Get or create user ATA for this mint
+    // 2️⃣ Get or create user ATA for this mint
     const userATA = await getOrCreateAssociatedTokenAccount(
       connection,
       mintAuthority,
@@ -105,7 +110,7 @@ app.post("/mint-nft", async (req, res) => {
       TOKEN_2022_PROGRAM_ID
     );
 
-    // 4️⃣ Transfer 1 token from backend ATA to user ATA
+    // 3️⃣ Transfer 1 token from backend ATA to user ATA
     const transferTx = new Transaction().add(
       createTransferInstruction(
         backendATA.address,
@@ -133,7 +138,7 @@ app.post("/mint-nft", async (req, res) => {
 });
 
 /**
- * 🔥 Burn NFT from user's wallet as delegate
+ * Burn NFT from user's wallet as delegate
  */
 app.post("/burn-nft", async (req, res) => {
   try {
@@ -191,7 +196,7 @@ app.post("/burn-nft", async (req, res) => {
   }
 });
 
-// 🚀 Start server
+// Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server live at http://localhost:${PORT}`);
