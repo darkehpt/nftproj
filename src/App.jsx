@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import AppWrapper from './App';
+import "./index.css";
 import {
   Connection,
   PublicKey,
@@ -34,7 +34,6 @@ import pass3 from "./utils/pass3.png";
 
 const CONNECTION = new Connection(clusterApiUrl("devnet"), "confirmed");
 
-// Backend wallet pubkey for delegate approval
 const BACKEND_AUTHORITY = new PublicKey(
   "64MWbWRdtrE8Rvr3Un59CQ4x3q11ZQHhdRbvtvmw81MG"
 );
@@ -190,7 +189,6 @@ const App = () => {
     }
   };
 
-  // Delegate approval — user authorizes backend wallet as delegate for burn rights
   const handleApproveDelegate = async () => {
     if (!wallet.connected || !wallet.publicKey) {
       setStatus("❗ Connect your wallet first.");
