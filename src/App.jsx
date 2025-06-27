@@ -284,7 +284,7 @@ const App = () => {
   };
 
   return (
-    <div className="p-6 max-w-screen-md mx-auto text-center space-y-4">
+    <div className="p-6 max-w-screen-md mx-auto text-center space-y-4" style={{ backgroundColor: "black", color: "white" }}>
       <h1 className="text-2xl font-bold">🚀 Buy & Mint Data Plan NFT</h1>
       <WalletMultiButton />
       <div>
