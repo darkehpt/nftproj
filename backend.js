@@ -1,19 +1,26 @@
-const express = require("express");
-const cors = require("cors");
-const {
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import {
   Connection,
   Keypair,
   PublicKey,
   clusterApiUrl,
   sendAndConfirmTransaction,
-} = require("@solana/web3.js");
+  Transaction,
+} from "@solana/web3.js";
 
-const {
+import {
   getAssociatedTokenAddress,
   getAccount,
   createTransferInstruction,
+  createBurnInstruction,
+  createAssociatedTokenAccountInstruction,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
-} = require("@solana/spl-token");
+} from "@solana/spl-token";
+
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -65,14 +72,9 @@ app.post("/mint-nft", async (req, res) => {
 
     const userAtaInfo = await connection.getAccountInfo(userAta);
 
-    const tx = new (require("@solana/web3.js").Transaction)();
+    const tx = new Transaction();
 
     if (!userAtaInfo) {
-      const {
-        createAssociatedTokenAccountInstruction,
-        ASSOCIATED_TOKEN_PROGRAM_ID,
-      } = require("@solana/spl-token");
-
       tx.add(
         createAssociatedTokenAccountInstruction(
           BACKEND_AUTHORITY,
@@ -99,12 +101,12 @@ app.post("/mint-nft", async (req, res) => {
     const sig = await sendAndConfirmTransaction(connection, tx, [BACKEND_WALLET]);
     res.json({ success: true, txid: sig });
   } catch (err) {
-    console.error("Mint error:", err);
+    console.error("❌ Mint error:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// Optional burn endpoint (if you want to allow server-side burning)
+// Burn NFT endpoint
 app.post("/burn-nft", async (req, res) => {
   try {
     const { userPubkey, plan } = req.body;
@@ -122,14 +124,11 @@ app.post("/burn-nft", async (req, res) => {
       TOKEN_2022_PROGRAM_ID
     );
 
-    const { createBurnInstruction } = require("@solana/spl-token");
-    const tx = new (require("@solana/web3.js").Transaction)();
-
-    tx.add(
+    const tx = new Transaction().add(
       createBurnInstruction(
         userAta,
         mint,
-        BACKEND_AUTHORITY, // backend is delegate
+        BACKEND_AUTHORITY,
         1,
         [],
         TOKEN_2022_PROGRAM_ID
@@ -139,7 +138,7 @@ app.post("/burn-nft", async (req, res) => {
     const sig = await sendAndConfirmTransaction(connection, tx, [BACKEND_WALLET]);
     res.json({ success: true, txid: sig });
   } catch (err) {
-    console.error("Burn error:", err);
+    console.error("❌ Burn error:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
