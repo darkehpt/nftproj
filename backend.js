@@ -12,38 +12,40 @@ import {
 import {
   getOrCreateAssociatedTokenAccount,
   createBurnInstruction,
-  createApproveInstruction,
   getAccount,
   createTransferInstruction,
   TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
 
 dotenv.config();
+
 const app = express();
 
-// CORS Setup: Allow your frontend origins
+// CORS Setup - allow your frontend origins
 const allowedOrigins = [
-  "http://localhost:3000", // local dev frontend
-  "https://nftproj-frans-projects-d13b4cab.vercel.app", // deployed frontend
+  "http://localhost:3000",
+  "https://nftproj-frans-projects-d13b4cab.vercel.app",
 ];
 
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true); // allow REST tools or curl
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = `CORS policy: Origin ${origin} not allowed`;
-      return callback(new Error(msg), false);
-    }
-    return callback(null, true);
-  },
-  methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type"],
-}));
-app.options("*", cors()); // enable pre-flight
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true); // allow REST clients like curl or Postman
+      if (!allowedOrigins.includes(origin)) {
+        return callback(new Error(`CORS policy: Origin ${origin} not allowed`), false);
+      }
+      return callback(null, true);
+    },
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type"],
+  })
+);
+
+app.options("*", cors()); // enable pre-flight requests
 
 app.use(express.json());
 
-// Log requests for debugging
+// Logging middleware
 app.use((req, res, next) => {
   console.log("📩 Request:", req.method, req.path);
   console.log("📦 Body:", req.body);
@@ -54,7 +56,7 @@ const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
 
 // Load backend wallet from env secret
 const secretRaw = process.env.MINT_AUTHORITY_SECRET;
-if (!secretRaw) throw new Error("MINT_AUTHORITY_SECRET not found");
+if (!secretRaw) throw new Error("MINT_AUTHORITY_SECRET not found in env");
 
 let secretArray;
 try {
@@ -65,9 +67,9 @@ try {
 }
 
 const mintAuthority = Keypair.fromSecretKey(Uint8Array.from(secretArray));
-console.log("✅ Backend wallet:", mintAuthority.publicKey.toBase58());
+console.log("✅ Backend wallet loaded:", mintAuthority.publicKey.toBase58());
 
-// Predefined mint addresses for each plan (replace with your actual mint addresses)
+// Predefined mint addresses for plans (replace with your real mints)
 const PREDEFINED_MINTS = {
   "10GB": new PublicKey("GXsBcsscLxMRKLgwWWnKkUzuXdEXwr74NiSqJrBs21Mz"),
   "25GB": new PublicKey("HDtzBt6nvoHLhiV8KLrovhnP4pYesguq89J2vZZbn6kA"),
@@ -75,7 +77,7 @@ const PREDEFINED_MINTS = {
 };
 
 /**
- * Transfer 1 token from backend ATA to user ATA
+ * Transfer 1 NFT token from backend ATA to user ATA
  */
 app.post("/mint-nft", async (req, res) => {
   try {
@@ -86,7 +88,7 @@ app.post("/mint-nft", async (req, res) => {
     const user = new PublicKey(userPubkey);
     const mint = PREDEFINED_MINTS[plan];
 
-    // 1️⃣ Get or create backend ATA for this mint
+    // Get or create backend ATA for mint
     const backendATA = await getOrCreateAssociatedTokenAccount(
       connection,
       mintAuthority,
@@ -98,7 +100,7 @@ app.post("/mint-nft", async (req, res) => {
       TOKEN_2022_PROGRAM_ID
     );
 
-    // 2️⃣ Get or create user ATA for this mint
+    // Get or create user ATA for mint
     const userATA = await getOrCreateAssociatedTokenAccount(
       connection,
       mintAuthority,
@@ -110,7 +112,13 @@ app.post("/mint-nft", async (req, res) => {
       TOKEN_2022_PROGRAM_ID
     );
 
-    // 3️⃣ Transfer 1 token from backend ATA to user ATA
+    // Check backend ATA balance to prevent transfer failures
+    const backendAccountInfo = await getAccount(connection, backendATA.address, "confirmed", TOKEN_2022_PROGRAM_ID);
+    if (backendAccountInfo.amount < BigInt(1)) {
+      throw new Error(`Backend ATA has insufficient tokens for mint ${mint.toBase58()}`);
+    }
+
+    // Transfer 1 token from backend ATA to user ATA
     const transferTx = new Transaction().add(
       createTransferInstruction(
         backendATA.address,
@@ -143,11 +151,12 @@ app.post("/mint-nft", async (req, res) => {
 app.post("/burn-nft", async (req, res) => {
   try {
     const { mint, user } = req.body;
-    if (!mint || !user) throw new Error("Missing 'mint' or 'user' in request body");
+    if (!mint || !user) throw new Error("Missing 'mint' or 'user'");
 
     const mintKey = new PublicKey(mint);
     const userKey = new PublicKey(user);
 
+    // Get or create user ATA for mint
     const userATA = await getOrCreateAssociatedTokenAccount(
       connection,
       mintAuthority,
@@ -159,23 +168,20 @@ app.post("/burn-nft", async (req, res) => {
       TOKEN_2022_PROGRAM_ID
     );
 
-    const tokenAccount = await getAccount(
-      connection,
-      userATA.address,
-      "confirmed",
-      TOKEN_2022_PROGRAM_ID
-    );
+    // Fetch user token account info
+    const tokenAccount = await getAccount(connection, userATA.address, "confirmed", TOKEN_2022_PROGRAM_ID);
 
-    console.log("🔍 Checking delegation...");
+    // Check if backend is delegate with allowance >= 1
     if (
       !tokenAccount.delegate ||
       !tokenAccount.delegate.equals(mintAuthority.publicKey) ||
-      tokenAccount.delegatedAmount < 1
+      tokenAccount.delegatedAmount < BigInt(1)
     ) {
-      throw new Error("Backend not delegate or no allowance to burn");
+      throw new Error("Backend wallet is not delegate or has insufficient allowance to burn");
     }
 
-    const tx = new Transaction().add(
+    // Burn 1 token from user ATA
+    const burnTx = new Transaction().add(
       createBurnInstruction(
         userATA.address,
         mintKey,
@@ -186,7 +192,7 @@ app.post("/burn-nft", async (req, res) => {
       )
     );
 
-    const sig = await sendAndConfirmTransaction(connection, tx, [mintAuthority]);
+    const sig = await sendAndConfirmTransaction(connection, burnTx, [mintAuthority]);
     console.log("🔥 Burned NFT in tx:", sig);
 
     return res.json({ success: true, sig });
