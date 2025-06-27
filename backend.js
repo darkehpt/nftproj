@@ -18,7 +18,6 @@ import {
   getAccount,
   TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
-import bs58 from "bs58";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -29,18 +28,25 @@ app.use(express.json());
 
 const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
 
-// ✅ Load backend wallet from environment variable
-const secret = process.env.MINT_AUTHORITY_SECRET;
-if (!secret) {
+// ✅ Load backend wallet from environment variable as JSON array
+const secretRaw = process.env.MINT_AUTHORITY_SECRET;
+if (!secretRaw) {
   throw new Error("MINT_AUTHORITY_SECRET not found in environment");
 }
-const mintAuthority = Keypair.fromSecretKey(bs58.decode(secret));
+
+let secretArray;
+try {
+  secretArray = JSON.parse(secretRaw);
+} catch (e) {
+  throw new Error("MINT_AUTHORITY_SECRET must be a JSON array string (e.g. [123, 34, ...])");
+}
+
+const mintAuthority = Keypair.fromSecretKey(Uint8Array.from(secretArray));
 
 console.log("✅ Backend authority pubkey:", mintAuthority.publicKey.toBase58());
 
 /**
  * ✅ Mint a Token-2022 NFT to user
- * Automatically sets backend as close authority and delegate
  */
 app.post("/mint-nft", async (req, res) => {
   try {
@@ -49,7 +55,6 @@ app.post("/mint-nft", async (req, res) => {
 
     const userPublicKey = new PublicKey(user);
 
-    // Create NFT mint
     const mint = await createMint(
       connection,
       mintAuthority,
@@ -63,7 +68,6 @@ app.post("/mint-nft", async (req, res) => {
 
     console.log("✅ Mint created:", mint.toBase58());
 
-    // Create ATA
     const ata = await getOrCreateAssociatedTokenAccount(
       connection,
       mintAuthority,
@@ -75,7 +79,6 @@ app.post("/mint-nft", async (req, res) => {
       TOKEN_2022_PROGRAM_ID
     );
 
-    // Mint + approve delegate in one tx
     const tx = new Transaction();
 
     tx.add(
@@ -92,8 +95,8 @@ app.post("/mint-nft", async (req, res) => {
     tx.add(
       createApproveInstruction(
         ata.address,
-        mintAuthority.publicKey, // delegate (backend)
-        mintAuthority.publicKey, // authority (since backend owns mint)
+        mintAuthority.publicKey,
+        mintAuthority.publicKey,
         1,
         [],
         TOKEN_2022_PROGRAM_ID
@@ -168,7 +171,7 @@ app.post("/burn-nft", async (req, res) => {
   }
 });
 
-// Start server
+// 🚀 Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
