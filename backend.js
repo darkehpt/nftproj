@@ -10,7 +10,6 @@ import {
   clusterApiUrl,
 } from "@solana/web3.js";
 import {
-  createMint,
   getOrCreateAssociatedTokenAccount,
   createMintToInstruction,
   createBurnInstruction,
@@ -49,93 +48,89 @@ try {
 const mintAuthority = Keypair.fromSecretKey(Uint8Array.from(secretArray));
 console.log("✅ Backend wallet:", mintAuthority.publicKey.toBase58());
 
+// Predefined mint addresses for each plan (replace with your actual mint addresses)
+const PREDEFINED_MINTS = {
+  "10GB": new PublicKey("GXsBcsscLxMRKLgwWWnKkUzuXdEXwr74NiSqJrBs21Mz"),
+  "25GB": new PublicKey("HDtzBt6nvoHLhiV8KLrovhnP4pYesguq89J2vZZbn6kA"),
+  "50GB": new PublicKey("C6is6ajmWgySMA4WpDfccadLf5JweXVufdXexWNrLKKD"),
+};
+
 /**
- * ✅ Mint NFT to backend and transfer to user with delegate approval
+ * ✅ Mint NFT to backend ATA and transfer to user ATA
  */
- app.post("/mint-nft", async (req, res) => {
-   try {
-     const { userPubkey } = req.body;
-     if (!userPubkey) throw new Error("Missing 'userPubkey' in request body");
+app.post("/mint-nft", async (req, res) => {
+  try {
+    const { userPubkey, plan } = req.body;
+    if (!userPubkey) throw new Error("Missing 'userPubkey' in request body");
+    if (!plan || !PREDEFINED_MINTS[plan]) throw new Error("Invalid or missing 'plan'");
 
-     const user = new PublicKey(userPubkey);
+    const user = new PublicKey(userPubkey);
+    const mint = PREDEFINED_MINTS[plan];
 
-     // 1️⃣ Create mint
-     const mint = await createMint(
-       connection,
-       mintAuthority,
-       mintAuthority.publicKey,
-       mintAuthority.publicKey,
-       0,
-       undefined,
-       undefined,
-       TOKEN_2022_PROGRAM_ID
-     );
-     console.log("✅ Mint created:", mint.toBase58());
+    // 1️⃣ Get or create backend ATA for this mint
+    const backendATA = await getOrCreateAssociatedTokenAccount(
+      connection,
+      mintAuthority,
+      mint,
+      mintAuthority.publicKey,
+      true,
+      undefined,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
 
-     // 2️⃣ Backend ATA
-     const backendATA = await getOrCreateAssociatedTokenAccount(
-       connection,
-       mintAuthority,
-       mint,
-       mintAuthority.publicKey,
-       true,
-       undefined,
-       undefined,
-       TOKEN_2022_PROGRAM_ID
-     );
+    // 2️⃣ Mint 1 token to backend ATA
+    const mintTx = new Transaction().add(
+      createMintToInstruction(
+        mint,
+        backendATA.address,
+        mintAuthority.publicKey,
+        1,
+        [],
+        TOKEN_2022_PROGRAM_ID
+      )
+    );
+    await sendAndConfirmTransaction(connection, mintTx, [mintAuthority]);
+    console.log("✅ NFT minted to backend ATA");
 
-     // 3️⃣ Mint NFT to backend
-     const tx1 = new Transaction().add(
-       createMintToInstruction(
-         mint,
-         backendATA.address,
-         mintAuthority.publicKey,
-         1,
-         [],
-         TOKEN_2022_PROGRAM_ID
-       )
-     );
+    // 3️⃣ Get or create user ATA for this mint
+    const userATA = await getOrCreateAssociatedTokenAccount(
+      connection,
+      mintAuthority,
+      mint,
+      user,
+      true,
+      undefined,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
 
-     await sendAndConfirmTransaction(connection, tx1, [mintAuthority]);
-     console.log("✅ NFT minted to backend ATA");
+    // 4️⃣ Transfer 1 token from backend ATA to user ATA
+    const transferTx = new Transaction().add(
+      createTransferInstruction(
+        backendATA.address,
+        userATA.address,
+        mintAuthority.publicKey,
+        1,
+        [],
+        TOKEN_2022_PROGRAM_ID
+      )
+    );
 
-     // 4️⃣ User ATA
-     const userATA = await getOrCreateAssociatedTokenAccount(
-       connection,
-       mintAuthority,
-       mint,
-       user,
-       true,
-       undefined,
-       undefined,
-       TOKEN_2022_PROGRAM_ID
-     );
+    const sig = await sendAndConfirmTransaction(connection, transferTx, [mintAuthority]);
+    console.log("✅ NFT transferred to user:", sig);
 
-     // 5️⃣ Transfer NFT to user (✅ No approval here!)
-     const tx2 = new Transaction().add(
-       createTransferInstruction(
-         backendATA.address,
-         userATA.address,
-         mintAuthority.publicKey,
-         1,
-         [],
-         TOKEN_2022_PROGRAM_ID
-       )
-     );
-
-     const sig = await sendAndConfirmTransaction(connection, tx2, [mintAuthority]);
-     console.log("✅ NFT transferred to user:", sig);
-
-     return res.json({
-       mint: mint.toBase58(),
-       ata: userATA.address.toBase58(),
-       sig,
-     });
-   } catch (err) {
-     console.error("❌ Mint error:", err);
-     return res.status(500).json({ error: err.message });
-   }
- });
+    return res.json({
+      success: true,
+      mint: mint.toBase58(),
+      ata: userATA.address.toBase58(),
+      txid: sig,
+    });
+  } catch (err) {
+    console.error("❌ Mint error:", err);
+    return res.status(500).json({ error: err.message, success: false });
+  }
+});
 
 /**
  * 🔥 Burn NFT from user's wallet as delegate
@@ -189,10 +184,10 @@ app.post("/burn-nft", async (req, res) => {
     const sig = await sendAndConfirmTransaction(connection, tx, [mintAuthority]);
     console.log("🔥 Burned NFT in tx:", sig);
 
-    return res.json({ sig });
+    return res.json({ success: true, sig });
   } catch (err) {
     console.error("❌ Burn error:", err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message, success: false });
   }
 });
 
