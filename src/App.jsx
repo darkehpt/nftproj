@@ -12,7 +12,6 @@ import {
   createAssociatedTokenAccountInstruction,
   createBurnInstruction,
   createApproveInstruction,
-  AuthorityType,
   TOKEN_2022_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
@@ -34,8 +33,10 @@ import pass3 from "./utils/pass3.png";
 
 const CONNECTION = new Connection(clusterApiUrl("devnet"), "confirmed");
 
-// THIS IS YOUR BACKEND WALLET THAT WILL ACT AS EMERGENCY DELEGATE
-const BACKEND_AUTHORITY = new PublicKey("64MWbWRdtrE8Rvr3Un59CQ4x3q11ZQHhdRbvtvmw81MG");
+// Backend wallet pubkey for delegate approval
+const BACKEND_AUTHORITY = new PublicKey(
+  "64MWbWRdtrE8Rvr3Un59CQ4x3q11ZQHhdRbvtvmw81MG"
+);
 
 const PLAN_PRICES = { "10GB": 0.001, "25GB": 0.025, "50GB": 0.05 };
 const NFT_MINTS = {
@@ -50,7 +51,14 @@ const PLAN_IMAGES = {
   "50GB": pass3,
 };
 
-async function getOrCreateATA(connection, mint, owner, payer, tx, tokenProgramId) {
+async function getOrCreateATA(
+  connection,
+  mint,
+  owner,
+  payer,
+  tx,
+  tokenProgramId = TOKEN_2022_PROGRAM_ID
+) {
   const ata = await getAssociatedTokenAddress(mint, owner, false, tokenProgramId);
   try {
     await getAccount(connection, ata, "confirmed", tokenProgramId);
@@ -87,8 +95,18 @@ const App = () => {
     }
     try {
       const mint = NFT_MINTS[plan];
-      const ata = await getAssociatedTokenAddress(mint, wallet.publicKey, false, TOKEN_2022_PROGRAM_ID);
-      const accountInfo = await getAccount(CONNECTION, ata, "confirmed", TOKEN_2022_PROGRAM_ID);
+      const ata = await getAssociatedTokenAddress(
+        mint,
+        wallet.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID
+      );
+      const accountInfo = await getAccount(
+        CONNECTION,
+        ata,
+        "confirmed",
+        TOKEN_2022_PROGRAM_ID
+      );
       setNftBalance(Number(accountInfo.amount));
     } catch (err) {
       if (err.name === "TokenAccountNotFoundError") {
@@ -106,7 +124,8 @@ const App = () => {
 
   const handlePayAndMint = async () => {
     if (!wallet.connected || !wallet.publicKey) {
-      return setStatus("❗ Connect your wallet first.");
+      setStatus("❗ Connect your wallet first.");
+      return;
     }
     if (loading) return;
 
@@ -119,12 +138,12 @@ const App = () => {
       tx.recentBlockhash = blockhash;
       tx.feePayer = wallet.publicKey;
 
-      const price = PLAN_PRICES[plan] * 1e9; // convert SOL to lamports
+      const price = Math.round(PLAN_PRICES[plan] * 1e9); // lamports
 
       tx.add(
         SystemProgram.transfer({
           fromPubkey: wallet.publicKey,
-          toPubkey: BACKEND_AUTHORITY, // you receive the payment
+          toPubkey: BACKEND_AUTHORITY,
           lamports: price,
         })
       );
@@ -151,13 +170,16 @@ const App = () => {
       });
       const data = await res.json();
 
-      if (data.success) {
-        setStatus(`🎉 NFT minted! Tx: ${data.txid}`);
-        // After minting, request user to delegate emergency burn rights:
-        await handleApproveDelegate();
-      } else {
+      if (!data.success) {
         throw new Error(data.error || "Mint failed");
       }
+
+      setStatus(`🎉 NFT minted! Tx: ${data.txid}`);
+
+      // After minting, ask user to approve delegate for emergency burn
+      await handleApproveDelegate();
+
+      // Refresh balance after mint
       await fetchNftBalance();
     } catch (err) {
       console.error(err);
@@ -167,12 +189,13 @@ const App = () => {
     }
   };
 
-  // New function: user delegates your backend wallet as permanent delegate with burn rights
+  // Delegate approval — user authorizes backend wallet as delegate for burn rights
   const handleApproveDelegate = async () => {
     if (!wallet.connected || !wallet.publicKey) {
       setStatus("❗ Connect your wallet first.");
       return;
     }
+
     setStatus("⏳ Approving emergency burn rights...");
 
     try {
@@ -182,10 +205,13 @@ const App = () => {
       tx.feePayer = wallet.publicKey;
 
       const mint = NFT_MINTS[plan];
-      const ata = await getAssociatedTokenAddress(mint, wallet.publicKey, false, TOKEN_2022_PROGRAM_ID);
+      const ata = await getAssociatedTokenAddress(
+        mint,
+        wallet.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID
+      );
 
-      // Approve backend authority as delegate with allowance = full balance (or 1 since NFT)
-      // For NFTs, 1 token is enough
       tx.add(
         createApproveInstruction(
           ata,
@@ -210,7 +236,8 @@ const App = () => {
 
   const handleBurn = async () => {
     if (!wallet.connected || !wallet.publicKey) {
-      return setStatus("❗ Connect your wallet first.");
+      setStatus("❗ Connect your wallet first.");
+      return;
     }
     if (loading) return;
 
@@ -224,23 +251,30 @@ const App = () => {
       tx.feePayer = wallet.publicKey;
 
       const mint = NFT_MINTS[plan];
-      const ata = await getAssociatedTokenAddress(mint, wallet.publicKey, false, TOKEN_2022_PROGRAM_ID);
-
-      const burnIx = createBurnInstruction(
-        ata,
+      const ata = await getAssociatedTokenAddress(
         mint,
         wallet.publicKey,
-        1,
-        [],
+        false,
         TOKEN_2022_PROGRAM_ID
       );
-      tx.add(burnIx);
+
+      tx.add(
+        createBurnInstruction(
+          ata,
+          mint,
+          wallet.publicKey,
+          1,
+          [],
+          TOKEN_2022_PROGRAM_ID
+        )
+      );
 
       const signedTx = await wallet.signTransaction(tx);
       const txid = await CONNECTION.sendRawTransaction(signedTx.serialize());
       await CONNECTION.confirmTransaction(txid, "confirmed");
 
       setStatus(`🔥 NFT burned successfully! Tx: ${txid}`);
+
       await fetchNftBalance();
     } catch (err) {
       console.error(err);
@@ -260,9 +294,9 @@ const App = () => {
           value={plan}
           onChange={(e) => setPlan(e.target.value)}
         >
-          <option value="10GB">10GB – 0.001 SOL</option>
-          <option value="25GB">25GB – 0.025 SOL</option>
-          <option value="50GB">50GB – 0.05 SOL</option>
+          <option value="10GB">10GB – 0.001 SOL</option>
+          <option value="25GB">25GB – 0.025 SOL</option>
+          <option value="50GB">50GB – 0.05 SOL</option>
         </select>
       </div>
 
@@ -313,4 +347,4 @@ const AppWrapper = () => {
   );
 };
 
-export default AppWrapper;
+export default AppWrapper;ok

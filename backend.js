@@ -13,7 +13,7 @@ import {
 import {
   getAssociatedTokenAddress,
   createTransferInstruction,
-  createBurnInstruction,
+  createBurnCheckedInstruction,
   createAssociatedTokenAccountInstruction,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
@@ -48,7 +48,7 @@ const NFT_MINTS = {
   "50GB": new PublicKey("C6is6ajmWgySMA4WpDfccadLf5JweXVufdXexWNrLKKD"),
 };
 
-// 🚀 Mint NFT
+// 🚀 Mint NFT to user
 app.post("/mint-nft", async (req, res) => {
   try {
     const { userPubkey, plan } = req.body;
@@ -97,7 +97,7 @@ app.post("/mint-nft", async (req, res) => {
   }
 });
 
-// 🔥 Burn NFT
+// 🔥 Burn NFT from user account (as delegate)
 app.post("/burn-nft", async (req, res) => {
   try {
     const { userPubkey, plan } = req.body;
@@ -111,11 +111,12 @@ app.post("/burn-nft", async (req, res) => {
     const userAta = await getAssociatedTokenAddress(mint, user, false, TOKEN_2022_PROGRAM_ID);
 
     const tx = new Transaction().add(
-      createBurnInstruction(
-        userAta,
-        mint,
-        BACKEND_AUTHORITY,
-        1,
+      createBurnCheckedInstruction(
+        userAta,           // source (user's token account)
+        mint,              // NFT mint
+        BACKEND_AUTHORITY, // delegate (your backend wallet)
+        1,                 // amount
+        0,                 // decimals (NFT = 0)
         [],
         TOKEN_2022_PROGRAM_ID
       )
