@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import "./index.css";
+import AppWrapper from './App';
 import {
   Connection,
   PublicKey,
@@ -348,4 +348,4 @@ const AppWrapper = () => {
   );
 };
 
-export default AppWrapper;ok
+export default AppWrapper;
