@@ -29,10 +29,10 @@ app.use(express.json());
 const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
 
 // ⚠️ Load backend wallet from secret key stored as base58 string in .env
-const secret = process.env.MINT_AUTHORITY_SECRET;  // <== use your env var here exactly
-if (!secret) throw new Error("Missing MINT_AUTHORITY_SECRET in .env");
-
-const BACKEND_WALLET = Keypair.fromSecretKey(bs58.decode(secret));
+const secretString = process.env.MINT_AUTHORITY_SECRET;
+if (!secretString) throw new Error("Missing MINT_AUTHORITY_SECRET in .env");
+const secret = JSON.parse(secretString);
+const BACKEND_WALLET = Keypair.fromSecretKey(Uint8Array.from(secret));
 const BACKEND_AUTHORITY = BACKEND_WALLET.publicKey;
 
 console.log("✅ Backend wallet loaded:", BACKEND_AUTHORITY.toBase58());
