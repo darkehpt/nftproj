@@ -112,8 +112,7 @@ app.post("/mint-nft", async (req, res) => {
         TOKEN_2022_PROGRAM_ID
       )
     );
-    console.log("Attempting to transfer from:", sourceTokenAccount.address.toBase58());
-    console.log("Balance in source:", sourceTokenAccount.amount.toString());
+  console.log("Attempting to transfer from:", backendAta.toBase58());
     const sig = await sendAndConfirmTransaction(connection, tx, [BACKEND_WALLET]);
     res.json({ success: true, txid: sig });
   } catch (err) {
