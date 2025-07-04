@@ -9,13 +9,7 @@
     "name": "Data Plans",
     "family": "StorageNFT"
   },
-  "seller_fee_basis_points": 500,
-  "creators": [
-    {
-      "address": "64MWbWRdtrE8Rvr3Un59CQ4x3q11ZQHhdRbvtvmw81MG",
-      "share": 100
-    }
-  ],
+
   "attributes": [
     { "trait_type": "Plan", "value": "50GB" }
   ]

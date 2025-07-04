@@ -20,34 +20,39 @@ import bs58 from "bs58";
 
 dotenv.config();
 
-// 🔧 Config
+// 🔧 Express app setup
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+// 🕸️ Solana connection (devnet)
 const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
 
-// ⚠️ Load backend wallet from secret key (store safely!)
+// ⚠️ Load backend wallet from secret key stored as base58 string in .env
 const secret = process.env.BACKEND_SECRET_KEY;
 if (!secret) throw new Error("Missing BACKEND_SECRET_KEY in .env");
+
 const BACKEND_WALLET = Keypair.fromSecretKey(bs58.decode(secret));
 const BACKEND_AUTHORITY = BACKEND_WALLET.publicKey;
 
-console.log("✅ Backend wallet:", BACKEND_AUTHORITY.toBase58());
+console.log("✅ Backend wallet loaded:", BACKEND_AUTHORITY.toBase58());
 
-// 🧿 Mint Soulbound NFT (burn old one if provided)
+// 🧿 Endpoint: Mint soulbound NFT, burn old NFT if provided
 app.post("/mint-nft", async (req, res) => {
   try {
     const { userPubkey, oldMintAddress } = req.body;
+
     if (!userPubkey) {
       return res.status(400).json({ success: false, error: "Missing userPubkey" });
     }
 
     const user = new PublicKey(userPubkey);
 
-    // 🧨 Burn old NFT
+    // 🧨 Burn old NFT if oldMintAddress provided
     if (oldMintAddress) {
       const oldMint = new PublicKey(oldMintAddress);
+
+      // Get or create user's token account for the old mint
       const oldTokenAccount = await getOrCreateAssociatedTokenAccount(
         connection,
         BACKEND_WALLET,
@@ -60,6 +65,7 @@ app.post("/mint-nft", async (req, res) => {
         ASSOCIATED_TOKEN_PROGRAM_ID
       );
 
+      // Fetch token account info to check balance
       const tokenAccountInfo = await getAccount(
         connection,
         oldTokenAccount.address,
@@ -85,20 +91,21 @@ app.post("/mint-nft", async (req, res) => {
       }
     }
 
-    // 🪙 Create new mint (soulbound = no freeze authority)
+    // 🪙 Create new mint (soulbound NFT with no freeze authority)
     const mint = await createMint(
       connection,
       BACKEND_WALLET,
       BACKEND_AUTHORITY,
-      null,
-      0,
+      null, // No freeze authority = soulbound
+      0, // decimals = 0 for NFT
       undefined,
       undefined,
       TOKEN_2022_PROGRAM_ID
     );
 
-    console.log("✅ New mint:", mint.toBase58());
+    console.log("✅ Created new mint:", mint.toBase58());
 
+    // Create or get associated token account for user
     const userAta = await getOrCreateAssociatedTokenAccount(
       connection,
       BACKEND_WALLET,
@@ -111,6 +118,7 @@ app.post("/mint-nft", async (req, res) => {
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
 
+    // Mint 1 token to user ATA
     const sig = await mintTo(
       connection,
       BACKEND_WALLET,
@@ -122,6 +130,8 @@ app.post("/mint-nft", async (req, res) => {
       undefined,
       TOKEN_2022_PROGRAM_ID
     );
+
+    console.log("✅ Minted new NFT to user:", sig);
 
     res.json({ success: true, txid: sig, mint: mint.toBase58() });
   } catch (err) {
