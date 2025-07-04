@@ -216,44 +216,36 @@ const App = () => {
   };
 
   const handleBurn = async () => {
-    if (!wallet.connected || !wallet.publicKey || loading) return;
+  if (!wallet.connected || !wallet.publicKey || loading) return;
 
-    setLoading(true);
-    setStatus("⏳ Burning NFT...");
-    
-    try {
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || "Soulbound mint failed");
-    } catch (err) {
-      const text = await res.text();
-      throw new Error(`Soulbound mint failed: ${text.slice(0, 100)}`);
-    }
+  setLoading(true);
+  setStatus("⏳ Burning NFT...");
 
-    try {
-      const tx = new Transaction();
-      const { blockhash } = await CONNECTION.getLatestBlockhash();
-      tx.recentBlockhash = blockhash;
-      tx.feePayer = wallet.publicKey;
+  try {
+    const tx = new Transaction();
+    const { blockhash } = await CONNECTION.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = wallet.publicKey;
 
-      const mint = NFT_MINTS[plan];
-      const ata = await getAssociatedTokenAddress(mint, wallet.publicKey, false, TOKEN_2022_PROGRAM_ID);
-      tx.add(createBurnInstruction(ata, mint, wallet.publicKey, 1, [], TOKEN_2022_PROGRAM_ID));
+    const mint = NFT_MINTS[plan];
+    const ata = await getAssociatedTokenAddress(mint, wallet.publicKey, false, TOKEN_2022_PROGRAM_ID);
+    tx.add(createBurnInstruction(ata, mint, wallet.publicKey, 1, [], TOKEN_2022_PROGRAM_ID));
 
-      const signedTx = await wallet.signTransaction(tx);
-      const txid = await CONNECTION.sendRawTransaction(signedTx.serialize());
-      await CONNECTION.confirmTransaction(txid, "confirmed");
+    const signedTx = await wallet.signTransaction(tx);
+    const txid = await CONNECTION.sendRawTransaction(signedTx.serialize());
+    await CONNECTION.confirmTransaction(txid, "confirmed");
 
-      setStatus(`🔥 NFT burned successfully! Tx: ${txid}`);
+    setStatus(`🔥 NFT burned successfully! Tx: ${txid}`);
 
-      await fetchPlanBalances();
-      await handleClaimSoulbound();
-    } catch (err) {
-      console.error(err);
-      setStatus(`❌ Burn failed: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
+    await fetchPlanBalances();
+    await handleClaimSoulbound(); // Optional: claim soulbound after burning
+  } catch (err) {
+    console.error(err);
+    setStatus(`❌ Burn failed: ${err.message}`);
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="p-6 max-w-screen-md mx-auto text-center space-y-6 bg-black text-white rounded-lg shadow-lg">
