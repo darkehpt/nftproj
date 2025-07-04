@@ -99,7 +99,50 @@ app.post("/mint-nft", async (req, res) => {
         console.log("ℹ️ Old NFT already burned or not found.");
       }
     }
+    const SOULBOUND_MINT = new PublicKey("4AxWE45GUvgWj7c6F2JGvMQNMqkGAduxBBDPcJ2YsbwA");
 
+    app.post("/mint-soulbound", async (req, res) => {
+      try {
+        const { userPubkey } = req.body;
+
+        if (!userPubkey) {
+          return res.status(400).json({ success: false, error: "Missing userPubkey" });
+        }
+
+        const user = new PublicKey(userPubkey);
+
+        const userAta = await getOrCreateAssociatedTokenAccount(
+          connection,
+          BACKEND_WALLET,
+          SOULBOUND_MINT,
+          user,
+          false,
+          "confirmed",
+          undefined,
+          TOKEN_2022_PROGRAM_ID,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        );
+
+        const sig = await mintTo(
+          connection,
+          BACKEND_WALLET,
+          SOULBOUND_MINT,
+          userAta.address,
+          BACKEND_AUTHORITY,
+          1,
+          [],
+          undefined,
+          TOKEN_2022_PROGRAM_ID
+        );
+
+        console.log("🔒 Soulbound NFT minted:", sig);
+
+        res.json({ success: true, txid: sig });
+      } catch (err) {
+        console.error("❌ Soulbound mint error:", err);
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
     // Get or create user's ATA for the mint
     const userAta = await getOrCreateAssociatedTokenAccount(
       connection,

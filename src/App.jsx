@@ -220,6 +220,14 @@ const App = () => {
 
     setLoading(true);
     setStatus("⏳ Burning NFT...");
+    
+    try {
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Soulbound mint failed");
+    } catch (err) {
+      const text = await res.text();
+      throw new Error(`Soulbound mint failed: ${text.slice(0, 100)}`);
+    }
 
     try {
       const tx = new Transaction();
