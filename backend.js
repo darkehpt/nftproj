@@ -24,11 +24,13 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-app.use(cors({
-  origin: "https://nftproj-frans-projects-d13b4cab.vercel.app",
-  methods: ["POST"],
-  allowedHeaders: ["Content-Type"],
-}));
+app.use(
+  cors({
+    origin: "https://nftproj-frans-projects-d13b4cab.vercel.app",
+    methods: ["POST"],
+    allowedHeaders: ["Content-Type"],
+  })
+);
 app.use(express.json());
 
 const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
@@ -48,7 +50,27 @@ const NFT_MINTS = {
 };
 
 // 🔐 Soulbound NFT mint address
-const SOULBOUND_MINT = new PublicKey("D5JEMeVxjKbNzh92mskS6ZznB4RtW23PBoHRj7rwYoGX");
+const SOULBOUND_MINT = new PublicKey("4AxWE45GUvgWj7c6F2JGvMQNMqkGAduxBBDPcJ2YsbwA");
+
+// Helper: Check if user owns any plan NFT
+async function userOwnsPlanNFT(userPubkey) {
+  for (const mint of Object.values(NFT_MINTS)) {
+    try {
+      const ata = await getAssociatedTokenAddress(mint, userPubkey, false, TOKEN_2022_PROGRAM_ID);
+      const accountInfo = await connection.getAccountInfo(ata);
+      if (accountInfo) {
+        // Parse token amount from account data (Token-2022)
+        // To get amount, use spl-token's getAccount method for proper parsing
+        // But getAccount requires connection, so:
+        const tokenAccount = await getAccount(connection, ata, "confirmed", TOKEN_2022_PROGRAM_ID);
+        if (tokenAccount.amount > 0n) return true;
+      }
+    } catch {
+      // No token account or error, ignore and check next
+    }
+  }
+  return false;
+}
 
 // 🚀 Mint plan NFT to user
 app.post("/mint-nft", async (req, res) => {
@@ -141,10 +163,26 @@ app.post("/mint-soulbound", async (req, res) => {
     }
 
     const user = new PublicKey(userPubkey);
-    const mint = SOULBOUND_MINT;
 
-    const backendAta = await getAssociatedTokenAddress(mint, BACKEND_AUTHORITY, false, TOKEN_2022_PROGRAM_ID);
-    const userAta = await getAssociatedTokenAddress(mint, user, false, TOKEN_2022_PROGRAM_ID);
+    // Check if user already owns soulbound NFT
+    const soulboundAta = await getAssociatedTokenAddress(SOULBOUND_MINT, user, false, TOKEN_2022_PROGRAM_ID);
+    const soulboundAccountInfo = await connection.getAccountInfo(soulboundAta);
+    if (soulboundAccountInfo) {
+      // Get token amount from account info:
+      const soulboundTokenAccount = await getAccount(connection, soulboundAta, "confirmed", TOKEN_2022_PROGRAM_ID);
+      if (soulboundTokenAccount.amount > 0n) {
+        return res.status(400).json({ success: false, error: "Soulbound NFT already owned" });
+      }
+    }
+
+    // Check if user owns at least one plan NFT
+    const ownsPlan = await userOwnsPlanNFT(user);
+    if (!ownsPlan) {
+      return res.status(400).json({ success: false, error: "You must own a plan NFT to claim the soulbound NFT" });
+    }
+
+    const backendAta = await getAssociatedTokenAddress(SOULBOUND_MINT, BACKEND_AUTHORITY, false, TOKEN_2022_PROGRAM_ID);
+    const userAta = await getAssociatedTokenAddress(SOULBOUND_MINT, user, false, TOKEN_2022_PROGRAM_ID);
     const userAtaInfo = await connection.getAccountInfo(userAta);
 
     const tx = new Transaction();
@@ -155,7 +193,7 @@ app.post("/mint-soulbound", async (req, res) => {
           BACKEND_AUTHORITY,
           userAta,
           user,
-          mint,
+          SOULBOUND_MINT,
           TOKEN_2022_PROGRAM_ID,
           ASSOCIATED_TOKEN_PROGRAM_ID
         )

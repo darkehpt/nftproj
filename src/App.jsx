@@ -264,7 +264,12 @@ const App = () => {
       </select>
 
       <div className="flex flex-col items-center space-y-2">
-        <img src={PLAN_IMAGES[plan]} alt={plan} className="w-40 h-40 rounded shadow-md" />
+      <img
+src={PLAN_IMAGES[plan]}
+alt={plan}
+className="rounded shadow-md"
+style={{ width: "300px", height: "300px" }}
+/>
         <p className="text-lg font-semibold">Owned: <span className="text-blue-400">{nftBalance}</span></p>
         <p className="text-sm text-green-300">
           Soulbound NFT: {soulboundOwned ? "✅ Owned" : "❌ Not Yet Claimed"}
@@ -282,6 +287,15 @@ const App = () => {
           {loading ? "Processing..." : "🔥 Burn NFT"}
         </button>
       </div>
+      {!soulboundOwned && Object.values(planBalances).some(b => b > 0) && (
+  <button
+    onClick={handleClaimSoulbound}
+    disabled={loading}
+    className={`py-2 px-4 rounded font-semibold ${loading ? "bg-gray-500" : "bg-purple-700 hover:bg-purple-800"} text-white`}
+  >
+    {loading ? "Processing..." : "🎁 Claim Soulbound NFT"}
+  </button>
+)}
 
       {status && <p className="mt-4 text-sm text-yellow-400">{status}</p>}
     </div>
