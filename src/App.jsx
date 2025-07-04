@@ -148,10 +148,10 @@ const App = () => {
 
     try {
       const res = await fetch("https://nftproj.onrender.com/mint-nft", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userPubkey: wallet.publicKey.toBase58(), plan }),
-      });
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ userPubkey: wallet.publicKey.toBase58(), plan }),
+});
       const data = await res.json();
       if (!data.success) throw new Error(data.error || "Mint failed");
 

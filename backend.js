@@ -7,7 +7,6 @@ import {
   clusterApiUrl,
 } from "@solana/web3.js";
 import {
-  createMint,
   getOrCreateAssociatedTokenAccount,
   mintTo,
   burn,
@@ -28,7 +27,7 @@ app.use(express.json());
 // 🕸️ Solana connection (devnet)
 const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
 
-// ⚠️ Load backend wallet from secret key stored as base58 string in .env
+// ⚠️ Load backend wallet from secret key stored as JSON array string in .env
 const secretString = process.env.MINT_AUTHORITY_SECRET;
 if (!secretString) throw new Error("Missing MINT_AUTHORITY_SECRET in .env");
 const secret = JSON.parse(secretString);
@@ -37,22 +36,32 @@ const BACKEND_AUTHORITY = BACKEND_WALLET.publicKey;
 
 console.log("✅ Backend wallet loaded:", BACKEND_AUTHORITY.toBase58());
 
-// 🧿 Endpoint: Mint soulbound NFT, burn old NFT if provided
+// Your predefined NFT mints for plans
+const NFT_MINTS = {
+  "10GB": new PublicKey("GXsBcsscLxMRKLgwWWnKkUzuXdEXwr74NiSqJrBs21Mz"),
+  "25GB": new PublicKey("HDtzBt6nvoHLhiV8KLrovhnP4pYesguq89J2vZZbn6kA"),
+  "50GB": new PublicKey("C6is6ajmWgySMA4WpDfccadLf5JweXVufdXexWNrLKKD"),
+};
+
 app.post("/mint-nft", async (req, res) => {
   try {
-    const { userPubkey, oldMintAddress } = req.body;
+    const { userPubkey, plan, oldMintAddress } = req.body;
 
     if (!userPubkey) {
       return res.status(400).json({ success: false, error: "Missing userPubkey" });
     }
+    if (!plan || !NFT_MINTS[plan]) {
+      return res.status(400).json({ success: false, error: "Invalid or missing plan" });
+    }
 
     const user = new PublicKey(userPubkey);
+    const mint = NFT_MINTS[plan];
 
-    // 🧨 Burn old NFT if oldMintAddress provided
+    // Burn old NFT if provided
     if (oldMintAddress) {
       const oldMint = new PublicKey(oldMintAddress);
 
-      // Get or create user's token account for the old mint
+      // Get or create user's ATA for old mint
       const oldTokenAccount = await getOrCreateAssociatedTokenAccount(
         connection,
         BACKEND_WALLET,
@@ -65,7 +74,7 @@ app.post("/mint-nft", async (req, res) => {
         ASSOCIATED_TOKEN_PROGRAM_ID
       );
 
-      // Fetch token account info to check balance
+      // Check token account balance
       const tokenAccountInfo = await getAccount(
         connection,
         oldTokenAccount.address,
@@ -91,21 +100,7 @@ app.post("/mint-nft", async (req, res) => {
       }
     }
 
-    // 🪙 Create new mint (soulbound NFT with no freeze authority)
-    const mint = await createMint(
-      connection,
-      BACKEND_WALLET,
-      BACKEND_AUTHORITY,
-      null, // No freeze authority = soulbound
-      0, // decimals = 0 for NFT
-      undefined,
-      undefined,
-      TOKEN_2022_PROGRAM_ID
-    );
-
-    console.log("✅ Created new mint:", mint.toBase58());
-
-    // Create or get associated token account for user
+    // Get or create user's ATA for the mint
     const userAta = await getOrCreateAssociatedTokenAccount(
       connection,
       BACKEND_WALLET,
@@ -131,7 +126,7 @@ app.post("/mint-nft", async (req, res) => {
       TOKEN_2022_PROGRAM_ID
     );
 
-    console.log("✅ Minted new NFT to user:", sig);
+    console.log(`✅ Minted 1 token from plan ${plan} mint:`, sig);
 
     res.json({ success: true, txid: sig, mint: mint.toBase58() });
   } catch (err) {
