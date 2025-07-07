@@ -1,3 +1,4 @@
+// backend.js
 import fs from "fs";
 import express from "express";
 import cors from "cors";
@@ -19,21 +20,20 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-function logEvent(message) {
-  const timestamp = new Date().toISOString();
-  const logLine = `[${timestamp}] ${message}\n`;
-  fs.appendFileSync("activity.log", logLine);
+function logEventJSON(entry) {
+  const existing = fs.existsSync("mint-log.json")
+    ? JSON.parse(fs.readFileSync("mint-log.json", "utf-8"))
+    : [];
+  existing.push({ ...entry, timestamp: new Date().toISOString() });
+  fs.writeFileSync("mint-log.json", JSON.stringify(existing, null, 2));
 }
 
-// 🔧 Express app setup
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🕸️ Solana connection (devnet)
 const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
 
-// ⚠️ Load backend wallet from secret key stored as JSON array string in .env
 const secretString = process.env.MINT_AUTHORITY_SECRET;
 if (!secretString) throw new Error("Missing MINT_AUTHORITY_SECRET in .env");
 const secret = JSON.parse(secretString);
@@ -42,7 +42,6 @@ const BACKEND_AUTHORITY = BACKEND_WALLET.publicKey;
 
 console.log("✅ Backend wallet loaded:", BACKEND_AUTHORITY.toBase58());
 
-// 📦 Predefined NFT mints for data plans
 const NFT_MINTS = {
   "10GB": new PublicKey("GXsBcsscLxMRKLgwWWnKkUzuXdEXwr74NiSqJrBs21Mz"),
   "25GB": new PublicKey("HDtzBt6nvoHLhiV8KLrovhnP4pYesguq89J2vZZbn6kA"),
@@ -51,25 +50,19 @@ const NFT_MINTS = {
 
 const SOULBOUND_MINT = new PublicKey("BGZPPAY2jJ1rgFNhRkHKjPVmxx1VFUisZSo569Pi71Pc");
 
-// 🔄 Mint data plan NFT
 app.post("/mint-nft", async (req, res) => {
   try {
     const { userPubkey, plan, oldMintAddress } = req.body;
 
-    if (!userPubkey) {
-      return res.status(400).json({ success: false, error: "Missing userPubkey" });
-    }
-    if (!plan || !NFT_MINTS[plan]) {
-      return res.status(400).json({ success: false, error: "Invalid or missing plan" });
+    if (!userPubkey || !plan || !NFT_MINTS[plan]) {
+      return res.status(400).json({ success: false, error: "Invalid request" });
     }
 
     const user = new PublicKey(userPubkey);
     const mint = NFT_MINTS[plan];
 
-    // Optional: Burn old NFT if provided
     if (oldMintAddress) {
       const oldMint = new PublicKey(oldMintAddress);
-
       const oldTokenAccount = await getOrCreateAssociatedTokenAccount(
         connection,
         BACKEND_WALLET,
@@ -81,7 +74,6 @@ app.post("/mint-nft", async (req, res) => {
         TOKEN_2022_PROGRAM_ID,
         ASSOCIATED_TOKEN_PROGRAM_ID
       );
-
       const tokenAccountInfo = await getAccount(
         connection,
         oldTokenAccount.address,
@@ -102,12 +94,10 @@ app.post("/mint-nft", async (req, res) => {
           TOKEN_2022_PROGRAM_ID
         );
         console.log("🔥 Burned old NFT:", burnSig);
-      } else {
-        console.log("ℹ️ Old NFT already burned or not found.");
+        logEventJSON({ type: "burn", wallet: userPubkey, mint: oldMintAddress, tx: burnSig });
       }
     }
 
-    // Mint new NFT
     const userAta = await getOrCreateAssociatedTokenAccount(
       connection,
       BACKEND_WALLET,
@@ -132,8 +122,9 @@ app.post("/mint-nft", async (req, res) => {
       TOKEN_2022_PROGRAM_ID
     );
 
-    console.log(`✅ Minted 1 token from plan ${plan} mint:`, sig);
-    logEvent(`MINT: ${userPubkey} minted ${plan} plan NFT`);
+    console.log(`✅ Minted ${plan} NFT to ${userPubkey}:`, sig);
+    logEventJSON({ type: "normal-nft-mint", wallet: userPubkey, plan, mint: mint.toBase58(), tx: sig });
+
     res.json({ success: true, txid: sig, mint: mint.toBase58() });
   } catch (err) {
     console.error("❌ Mint error:", err);
@@ -141,18 +132,13 @@ app.post("/mint-nft", async (req, res) => {
   }
 });
 
-// 🔒 Mint soulbound NFT
 app.post("/mint-soulbound", async (req, res) => {
   try {
     const { userPubkey } = req.body;
-
-    if (!userPubkey) {
-      return res.status(400).json({ success: false, error: "Missing userPubkey" });
-    }
+    if (!userPubkey) return res.status(400).json({ success: false, error: "Missing userPubkey" });
 
     const user = new PublicKey(userPubkey);
 
-    // 🧠 Check if user already owns the soulbound NFT
     const soulboundAta = await getOrCreateAssociatedTokenAccount(
       connection,
       BACKEND_WALLET,
@@ -176,7 +162,6 @@ app.post("/mint-soulbound", async (req, res) => {
       return res.status(400).json({ success: false, error: "Already owns soulbound NFT" });
     }
 
-    // 🔎 Check if user owns any of the normal NFTs
     let hasValidNFT = false;
     for (const mint of Object.values(NFT_MINTS)) {
       try {
@@ -203,16 +188,13 @@ app.post("/mint-soulbound", async (req, res) => {
           hasValidNFT = true;
           break;
         }
-      } catch (_) {
-        // Ignore missing accounts
-      }
+      } catch (_) {}
     }
 
     if (!hasValidNFT) {
       return res.status(400).json({ success: false, error: "User does not own any valid NFT plan" });
     }
 
-    // ✅ Mint soulbound NFT
     const sig = await mintTo(
       connection,
       BACKEND_WALLET,
@@ -226,9 +208,8 @@ app.post("/mint-soulbound", async (req, res) => {
     );
 
     console.log("🔒 Soulbound NFT minted:", sig);
-logEvent(`SOULBOUND: ${userPubkey} claimed soulbound NFT`);
-    // 📝 Optional: log successful mint
-    console.log(`✅ Soulbound minted for ${userPubkey} at ${new Date().toISOString()}`);
+    logEventJSON({ type: "soulbound-mint", wallet: userPubkey, mint: SOULBOUND_MINT.toBase58(), tx: sig });
+
     res.json({ success: true, txid: sig });
   } catch (err) {
     console.error("❌ Soulbound mint error:", err);
@@ -236,7 +217,6 @@ logEvent(`SOULBOUND: ${userPubkey} claimed soulbound NFT`);
   }
 });
 
-// 🚀 Start server
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
