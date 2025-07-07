@@ -1,6 +1,6 @@
 {
-  "name": "Desim Membership Pass",
-  "symbol": "DESIM",
+  "name": "Member NFT",
+  "symbol": "deSIM",
   "description": "A soulbound NFT granting membership to Desim — your decentralized mobile data passport. Non-transferable and permanently bound to your wallet.",
   "image": "https://gateway.lighthouse.storage/ipfs/bafybeiavofnbszydrr4jhw46ujad55v373dl4cve74bsbfaapfzgc7mmaa",
   "external_url": "https://testing.network",
@@ -8,10 +8,6 @@
     {
       "trait_type": "Type",
       "value": "Soulbound Membership"
-    },
-    {
-      "trait_type": "Access",
-      "value": "Unlimited Plan Linking"
     },
     {
       "trait_type": "Transferable",
@@ -28,7 +24,7 @@
     "category": "image",
     "creators": [
       {
-        "address": "Uc5VqBZ67vR8NwbFDPRuNe6jeiUkSHsB2M2UaUDGgZ9",
+        "address": "64MWbWRdtrE8Rvr3Un59CQ4x3q11ZQHhdRbvtvmw81MG",
         "share": 100
       }
     ]

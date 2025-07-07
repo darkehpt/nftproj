@@ -37,7 +37,7 @@ const CONNECTION = new Connection(clusterApiUrl("devnet"), "confirmed");
 const BACKEND_AUTHORITY = new PublicKey("64MWbWRdtrE8Rvr3Un59CQ4x3q11ZQHhdRbvtvmw81MG");
 
 // 📌 Replace this with your actual soulbound NFT mint address
-const SOULBOUND_MINT = new PublicKey("4AxWE45GUvgWj7c6F2JGvMQNMqkGAduxBBDPcJ2YsbwA");
+const SOULBOUND_MINT = new PublicKey("BGZPPAY2jJ1rgFNhRkHKjPVmxx1VFUisZSo569Pi71Pc");
 
 const PLAN_PRICES = { "10GB": 0.001, "25GB": 0.025, "50GB": 0.05 };
 const NFT_MINTS = {
