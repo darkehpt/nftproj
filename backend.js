@@ -20,6 +20,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+// 📜 JSON logger
 function logEventJSON(entry) {
   const existing = fs.existsSync("mint-log.json")
     ? JSON.parse(fs.readFileSync("mint-log.json", "utf-8"))
@@ -32,8 +33,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// 🔌 Solana devnet connection
 const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
 
+// 🔐 Load backend mint authority wallet
 const secretString = process.env.MINT_AUTHORITY_SECRET;
 if (!secretString) throw new Error("Missing MINT_AUTHORITY_SECRET in .env");
 const secret = JSON.parse(secretString);
@@ -42,18 +45,20 @@ const BACKEND_AUTHORITY = BACKEND_WALLET.publicKey;
 
 console.log("✅ Backend wallet loaded:", BACKEND_AUTHORITY.toBase58());
 
+// 🎫 NFT plan mint addresses
 const NFT_MINTS = {
   "10GB": new PublicKey("GXsBcsscLxMRKLgwWWnKkUzuXdEXwr74NiSqJrBs21Mz"),
   "25GB": new PublicKey("HDtzBt6nvoHLhiV8KLrovhnP4pYesguq89J2vZZbn6kA"),
   "50GB": new PublicKey("C6is6ajmWgySMA4WpDfccadLf5JweXVufdXexWNrLKKD"),
 };
 
+// 🔒 Soulbound NFT mint address
 const SOULBOUND_MINT = new PublicKey("BGZPPAY2jJ1rgFNhRkHKjPVmxx1VFUisZSo569Pi71Pc");
 
+// 🪙 Mint data plan NFT
 app.post("/mint-nft", async (req, res) => {
   try {
     const { userPubkey, plan, oldMintAddress } = req.body;
-
     if (!userPubkey || !plan || !NFT_MINTS[plan]) {
       return res.status(400).json({ success: false, error: "Invalid request" });
     }
@@ -61,6 +66,7 @@ app.post("/mint-nft", async (req, res) => {
     const user = new PublicKey(userPubkey);
     const mint = NFT_MINTS[plan];
 
+    // 🔥 Optional: burn old NFT if provided
     if (oldMintAddress) {
       const oldMint = new PublicKey(oldMintAddress);
       const oldTokenAccount = await getOrCreateAssociatedTokenAccount(
@@ -93,11 +99,12 @@ app.post("/mint-nft", async (req, res) => {
           undefined,
           TOKEN_2022_PROGRAM_ID
         );
-        console.log("🔥 Burned old NFT:", burnSig);
+        console.log(`🔥 Burned old NFT (${oldMintAddress}) for ${userPubkey}: ${burnSig}`);
         logEventJSON({ type: "burn", wallet: userPubkey, mint: oldMintAddress, tx: burnSig });
       }
     }
 
+    // 🎯 Mint new NFT
     const userAta = await getOrCreateAssociatedTokenAccount(
       connection,
       BACKEND_WALLET,
@@ -122,7 +129,7 @@ app.post("/mint-nft", async (req, res) => {
       TOKEN_2022_PROGRAM_ID
     );
 
-    console.log(`✅ Minted ${plan} NFT to ${userPubkey}:`, sig);
+    console.log(`✅ Minted ${plan} NFT to ${userPubkey}: ${sig}`);
     logEventJSON({ type: "normal-nft-mint", wallet: userPubkey, plan, mint: mint.toBase58(), tx: sig });
 
     res.json({ success: true, txid: sig, mint: mint.toBase58() });
@@ -132,6 +139,7 @@ app.post("/mint-nft", async (req, res) => {
   }
 });
 
+// 🎁 Claim soulbound NFT
 app.post("/mint-soulbound", async (req, res) => {
   try {
     const { userPubkey } = req.body;
@@ -207,7 +215,7 @@ app.post("/mint-soulbound", async (req, res) => {
       TOKEN_2022_PROGRAM_ID
     );
 
-    console.log("🔒 Soulbound NFT minted:", sig);
+    console.log(`🔒 Soulbound NFT minted to ${userPubkey}: ${sig}`);
     logEventJSON({ type: "soulbound-mint", wallet: userPubkey, mint: SOULBOUND_MINT.toBase58(), tx: sig });
 
     res.json({ success: true, txid: sig });
@@ -217,6 +225,7 @@ app.post("/mint-soulbound", async (req, res) => {
   }
 });
 
+// 🌐 Start server
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
