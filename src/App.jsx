@@ -193,7 +193,7 @@ const App = () => {
   };
 
   const handleClaimSoulbound = async () => {
-    if (!wallet.connected || !wallet.publicKey) return;
+    if (!wallet.connected || !wallet.publicKey || soulboundOwned) return;
 
     try {
       setStatus("⏳ Claiming your soulbound NFT...");
@@ -238,7 +238,7 @@ const App = () => {
     setStatus(`🔥 NFT burned successfully! Tx: ${txid}`);
 
     await fetchPlanBalances();
-    await handleClaimSoulbound(); // Optional: claim soulbound after burning
+    if (!soulboundOwned) await handleClaimSoulbound();
   } catch (err) {
     console.error(err);
     setStatus(`❌ Burn failed: ${err.message}`);

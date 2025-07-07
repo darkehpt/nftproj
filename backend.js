@@ -1,3 +1,4 @@
+import fs from "fs";
 import express from "express";
 import cors from "cors";
 import {
@@ -17,6 +18,12 @@ import {
 import dotenv from "dotenv";
 
 dotenv.config();
+
+function logEvent(message) {
+  const timestamp = new Date().toISOString();
+  const logLine = `[${timestamp}] ${message}\n`;
+  fs.appendFileSync("activity.log", logLine);
+}
 
 // 🔧 Express app setup
 const app = express();
@@ -126,6 +133,7 @@ app.post("/mint-nft", async (req, res) => {
     );
 
     console.log(`✅ Minted 1 token from plan ${plan} mint:`, sig);
+    logEvent(`MINT: ${userPubkey} minted ${plan} plan NFT`);
     res.json({ success: true, txid: sig, mint: mint.toBase58() });
   } catch (err) {
     console.error("❌ Mint error:", err);
@@ -144,7 +152,8 @@ app.post("/mint-soulbound", async (req, res) => {
 
     const user = new PublicKey(userPubkey);
 
-    const userAta = await getOrCreateAssociatedTokenAccount(
+    // 🧠 Check if user already owns the soulbound NFT
+    const soulboundAta = await getOrCreateAssociatedTokenAccount(
       connection,
       BACKEND_WALLET,
       SOULBOUND_MINT,
@@ -156,11 +165,59 @@ app.post("/mint-soulbound", async (req, res) => {
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
 
+    const soulboundAccount = await getAccount(
+      connection,
+      soulboundAta.address,
+      "confirmed",
+      TOKEN_2022_PROGRAM_ID
+    ).catch(() => null);
+
+    if (soulboundAccount && Number(soulboundAccount.amount) > 0) {
+      return res.status(400).json({ success: false, error: "Already owns soulbound NFT" });
+    }
+
+    // 🔎 Check if user owns any of the normal NFTs
+    let hasValidNFT = false;
+    for (const mint of Object.values(NFT_MINTS)) {
+      try {
+        const ata = await getOrCreateAssociatedTokenAccount(
+          connection,
+          BACKEND_WALLET,
+          mint,
+          user,
+          false,
+          "confirmed",
+          undefined,
+          TOKEN_2022_PROGRAM_ID,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        );
+
+        const account = await getAccount(
+          connection,
+          ata.address,
+          "confirmed",
+          TOKEN_2022_PROGRAM_ID
+        );
+
+        if (Number(account.amount) > 0) {
+          hasValidNFT = true;
+          break;
+        }
+      } catch (_) {
+        // Ignore missing accounts
+      }
+    }
+
+    if (!hasValidNFT) {
+      return res.status(400).json({ success: false, error: "User does not own any valid NFT plan" });
+    }
+
+    // ✅ Mint soulbound NFT
     const sig = await mintTo(
       connection,
       BACKEND_WALLET,
       SOULBOUND_MINT,
-      userAta.address,
+      soulboundAta.address,
       BACKEND_AUTHORITY,
       1,
       [],
@@ -169,6 +226,9 @@ app.post("/mint-soulbound", async (req, res) => {
     );
 
     console.log("🔒 Soulbound NFT minted:", sig);
+logEvent(`SOULBOUND: ${userPubkey} claimed soulbound NFT`);
+    // 📝 Optional: log successful mint
+    console.log(`✅ Soulbound minted for ${userPubkey} at ${new Date().toISOString()}`);
     res.json({ success: true, txid: sig });
   } catch (err) {
     console.error("❌ Soulbound mint error:", err);
