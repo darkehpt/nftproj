@@ -22,11 +22,23 @@ dotenv.config();
 
 // 📜 JSON logger
 function logEventJSON(entry) {
-  const existing = fs.existsSync("mint-log.json")
-    ? JSON.parse(fs.readFileSync("mint-log.json", "utf-8"))
-    : [];
+  let existing = [];
+  try {
+    if (fs.existsSync("mint-log.json")) {
+      const content = fs.readFileSync("mint-log.json", "utf-8");
+      existing = content ? JSON.parse(content) : [];
+    }
+  } catch (err) {
+    console.warn("⚠️ Failed to read or parse mint-log.json. Overwriting log file.");
+  }
+
   existing.push({ ...entry, timestamp: new Date().toISOString() });
-  fs.writeFileSync("mint-log.json", JSON.stringify(existing, null, 2));
+
+  try {
+    fs.writeFileSync("mint-log.json", JSON.stringify(existing, null, 2));
+  } catch (err) {
+    console.error("❌ Failed to write mint-log.json:", err);
+  }
 }
 
 const app = express();
