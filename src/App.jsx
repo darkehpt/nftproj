@@ -214,6 +214,21 @@ const App = () => {
 
       setStatus(`🔥 NFT burned successfully! Tx: ${txid}`);
       await fetchPlanBalances();
+
+      // ✅ Send burn log to backend
+      try {
+        await fetch("https://nftproj.onrender.com/log-burn", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userPubkey: wallet.publicKey.toBase58(),
+            mint: mint.toBase58(),
+            txid,
+          }),
+        });
+      } catch (logErr) {
+        console.warn("⚠️ Failed to send burn log to backend:", logErr);
+      }
     } catch (err) {
       console.error(err);
       setStatus(`❌ Burn failed: ${err.message}`);

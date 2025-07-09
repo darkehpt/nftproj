@@ -213,7 +213,30 @@ app.post("/mint-soulbound", async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+// 🔥 Log frontend-confirmed burn
+app.post("/log-burn", async (req, res) => {
+  try {
+    const { userPubkey, mint, txid } = req.body;
+    if (!userPubkey || !mint || !txid) {
+      return res.status(400).json({ success: false, error: "Missing fields in burn log" });
+    }
 
+    const burnLog = {
+      type: "user-initiated-burn",
+      wallet: userPubkey,
+      mint,
+      tx: txid,
+    };
+
+    console.log(`🧾 Received frontend burn log from ${userPubkey}: ${txid}`);
+    logEventJSON(burnLog);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("❌ Burn log error:", err);
+    res.status(500).json({ success: false, error: "Failed to log burn" });
+  }
+});
 // 🌐 Start server
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
