@@ -108,72 +108,88 @@ const App = () => {
     return Buffer.from(signed).toString("base64");
   };
   const handlePayAndMint = async () => {
-    if (!wallet.connected || !wallet.publicKey || loading) return;
-    setLoading(true);
-    setStatus("⏳ Processing payment...");
+  if (!wallet.connected || !wallet.publicKey || loading) return;
+  setLoading(true);
+  setStatus("✍️ Signing intent...");
 
-    try {
-      const tx = new Transaction();
-      const { blockhash } = await CONNECTION.getLatestBlockhash();
-      tx.recentBlockhash = blockhash;
-      tx.feePayer = wallet.publicKey;
+  let message, signature;
 
-      const price = Math.round(PLAN_PRICES[plan] * 1e9);
-      tx.add(SystemProgram.transfer({ fromPubkey: wallet.publicKey, toPubkey: BACKEND_AUTHORITY, lamports: price }));
+  try {
+    const timestamp = Date.now();
+    message = `I WANT DATA: ${plan} | ${wallet.publicKey.toBase58()} | ${timestamp}`;
+    signature = await signMessageAndGetSignature(wallet, message);
+  } catch (err) {
+    console.error(err);
+    setStatus(`❌ Signature failed: ${err.message}`);
+    setLoading(false);
+    return;
+  }
 
-      const signedTx = await wallet.signTransaction(tx);
-      const txid = await CONNECTION.sendRawTransaction(signedTx.serialize());
-      await CONNECTION.confirmTransaction(txid, "confirmed");
+  setStatus("⏳ Processing payment...");
 
-      setStatus(`💸 Payment successful! Tx: ${txid}`);
-    } catch (err) {
-      console.error(err);
-      setStatus(`❌ Payment failed: ${err.message}`);
-      setLoading(false);
-      return;
+  let paymentTxid = null;
+  try {
+    const tx = new Transaction();
+    const { blockhash } = await CONNECTION.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = wallet.publicKey;
+
+    const price = Math.round(PLAN_PRICES[plan] * 1e9);
+    tx.add(SystemProgram.transfer({
+      fromPubkey: wallet.publicKey,
+      toPubkey: BACKEND_AUTHORITY,
+      lamports: price
+    }));
+
+    const signedTx = await wallet.signTransaction(tx);
+    paymentTxid = await CONNECTION.sendRawTransaction(signedTx.serialize());
+    await CONNECTION.confirmTransaction(paymentTxid, "confirmed");
+
+    setStatus(`💸 Payment successful! Tx: ${paymentTxid}`);
+  } catch (err) {
+    console.error(err);
+    setStatus(`❌ Payment failed: ${err.message}`);
+    setLoading(false);
+    return;
+  }
+
+  setStatus("⏳ Minting your NFT...");
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    const res = await fetch("https://nftproj.onrender.com/mint-nft", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userPubkey: wallet.publicKey.toBase58(),
+        plan,
+        message,
+        signature
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Backend error: ${errText}`);
     }
 
-    setStatus("⏳ Minting your NFT...");
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || "Mint failed");
 
-    try {
-      const timestamp = Date.now();
-      const message = `mint-nft:${wallet.publicKey.toBase58()}:${plan}:${timestamp}`;
-      const signature = await signMessageAndGetSignature(wallet, message);
-
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
-
-      const res = await fetch("https://nftproj.onrender.com/mint-nft", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userPubkey: wallet.publicKey.toBase58(),
-          plan,
-          message,
-          signature,
-        }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeout);
-
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Backend error: ${errText}`);
-      }
-
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || "Mint failed");
-
-      setStatus(`🎉 NFT minted! Tx: ${data.txid}`);
-      await fetchPlanBalances();
-    } catch (err) {
-      console.error(err);
-      setStatus(`❌ NFT minting failed: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
+    setStatus(`🎉 NFT minted! Tx: ${data.txid}`);
+    await fetchPlanBalances();
+  } catch (err) {
+    console.error(err);
+    setStatus(`❌ NFT minting failed: ${err.message}`);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleClaimSoulbound = async () => {
     if (!wallet.connected || !wallet.publicKey || soulboundOwned) return;
