@@ -113,10 +113,15 @@ const App = () => {
   setStatus("✍️ Signing intent...");
 
   let message, signature;
+  const timestamp = Date.now();
+  const dateObj = new Date(timestamp);
+
+  // Format timestamp as dd-mm-yyyy // hh:mm:ss
+  const pad = (n) => n.toString().padStart(2, "0");
+  const formattedTime = `${pad(dateObj.getDate())}-${pad(dateObj.getMonth() + 1)}-${dateObj.getFullYear()} // ${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}`;
 
   try {
-    const timestamp = Date.now();
-    message = `I WANT DATA: ${plan} | ${wallet.publicKey.toBase58()} | ${timestamp}`;
+    message = `I WANT DATA: ${plan}\nWallet: ${wallet.publicKey.toBase58()}\nTime: ${formattedTime}\nEpoch: ${timestamp}`;
     signature = await signMessageAndGetSignature(wallet, message);
   } catch (err) {
     console.error(err);
@@ -198,8 +203,10 @@ setLoading(true);
 setStatus("✍️ Signing soulbound claim...");
 
 try {
-  const timestamp = Date.now();
-  const message = `I WANT MY SOULBOUND:${wallet.publicKey.toBase58()}:${timestamp}`;
+  const now = new Date();
+  const timestamp = `${now.getDate().toString().padStart(2, '0')}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getFullYear()} // ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+
+const message = `I WANT MY SOULBOUND\nWallet: ${wallet.publicKey.toBase58()}\nTime: ${formattedTime}\nEpoch: ${timestamp}`;
   const signature = await signMessageAndGetSignature(wallet, message);
 
   setStatus("⏳ Claiming your soulbound NFT...");

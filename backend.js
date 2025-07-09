@@ -135,7 +135,7 @@ app.post("/mint-nft", async (req, res) => {
   }
 });
 
-// 🎁 Claim soulbound NFT
+
 // 🎁 Claim soulbound NFT (with signature check)
 app.post("/mint-soulbound", async (req, res) => {
   try {
@@ -151,9 +151,9 @@ app.post("/mint-soulbound", async (req, res) => {
     }
 
     // 🔒 Ensure message is for soulbound mint
-    if (!message.startsWith("mint-soulbound:")) {
-      return res.status(400).json({ success: false, error: "Invalid message format" });
-    }
+    if (!message.startsWith("I WANT MY SOULBOUND")) {
+    return res.status(400).json({ success: false, error: "Invalid message format" });
+  }
 
     const user = new PublicKey(userPubkey);
 
