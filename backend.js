@@ -57,7 +57,7 @@ app.use(cors());
 app.use(express.json());
 
 // 🔌 Solana devnet connection
-const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
+const connection = new Connection(clusterApiUrl("devnet"), "finalized");
 
 // 🔐 Load backend mint authority wallet
 const secretString = process.env.MINT_AUTHORITY_SECRET;
@@ -100,7 +100,7 @@ app.post("/mint-nft", async (req, res) => {
       mint,
       user,
       false,
-      "confirmed",
+      "finalized",
       undefined,
       TOKEN_2022_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID
@@ -164,7 +164,7 @@ app.post("/mint-soulbound", async (req, res) => {
       SOULBOUND_MINT,
       user,
       false,
-      "confirmed",
+      "finalized",
       undefined,
       TOKEN_2022_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID
@@ -191,7 +191,7 @@ app.post("/mint-soulbound", async (req, res) => {
           mint,
           user,
           false,
-          "confirmed",
+          "finalized",
           undefined,
           TOKEN_2022_PROGRAM_ID,
           ASSOCIATED_TOKEN_PROGRAM_ID

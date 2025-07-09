@@ -258,7 +258,18 @@ const handleClaimSoulbound = async () => {
       tx.add(
         createBurnInstruction(ata, mint, wallet.publicKey, 1, [], TOKEN_2022_PROGRAM_ID)
       );
+      import { createCloseAccountInstruction } from "@solana/spl-token";
 
+      // ⬇️ After burnInstruction
+      tx.add(
+        createCloseAccountInstruction(
+          ata,                  // account to close
+          wallet.publicKey,     // rent refund receiver
+          wallet.publicKey,     // owner (payer)
+          [],                   // multisig signers (none)
+          TOKEN_2022_PROGRAM_ID
+        )
+      );
       const signedTx = await wallet.signTransaction(tx);
       const txid = await CONNECTION.sendRawTransaction(signedTx.serialize());
       await CONNECTION.confirmTransaction(txid, "confirmed");
