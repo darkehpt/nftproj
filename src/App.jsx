@@ -191,28 +191,41 @@ const App = () => {
   }
 };
 
-  const handleClaimSoulbound = async () => {
-    if (!wallet.connected || !wallet.publicKey || soulboundOwned) return;
+const handleClaimSoulbound = async () => {
+if (!wallet.connected || !wallet.publicKey || soulboundOwned) return;
 
-    try {
-      setStatus("⏳ Claiming your soulbound NFT...");
+setLoading(true);
+setStatus("✍️ Signing soulbound claim...");
 
-      const res = await fetch("https://nftproj.onrender.com/mint-soulbound", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userPubkey: wallet.publicKey.toBase58() }),
-      });
+try {
+  const timestamp = Date.now();
+  const message = `I WANT MY SOULBOUND:${wallet.publicKey.toBase58()}:${timestamp}`;
+  const signature = await signMessageAndGetSignature(wallet, message);
 
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || "Soulbound mint failed");
+  setStatus("⏳ Claiming your soulbound NFT...");
 
-      setStatus(`🔒 Soulbound NFT minted! Tx: ${data.txid}`);
-      setSoulboundOwned(true);
-    } catch (err) {
-      console.error(err);
-      setStatus(`❌ Claim failed: ${err.message}`);
-    }
-  };
+  const res = await fetch("https://nftproj.onrender.com/mint-soulbound", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      userPubkey: wallet.publicKey.toBase58(),
+      message,
+      signature,
+    }),
+  });
+
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || "Soulbound mint failed");
+
+  setStatus(`🔒 Soulbound NFT minted! Tx: ${data.txid}`);
+  setSoulboundOwned(true);
+} catch (err) {
+  console.error(err);
+  setStatus(`❌ Claim failed: ${err.message}`);
+} finally {
+  setLoading(false);
+}
+};
 
   const handleBurn = async () => {
     if (!wallet.connected || !wallet.publicKey || loading || nftBalance === 0) return;

@@ -136,13 +136,28 @@ app.post("/mint-nft", async (req, res) => {
 });
 
 // 🎁 Claim soulbound NFT
+// 🎁 Claim soulbound NFT (with signature check)
 app.post("/mint-soulbound", async (req, res) => {
   try {
-    const { userPubkey } = req.body;
-    if (!userPubkey) return res.status(400).json({ success: false, error: "Missing userPubkey" });
+    const { userPubkey, message, signature } = req.body;
+
+    if (!userPubkey || !message || !signature) {
+      return res.status(400).json({ success: false, error: "Missing fields in request" });
+    }
+
+    // 🧾 Verify signature
+    if (!verifyWalletSignature({ wallet: userPubkey, message, signature })) {
+      return res.status(401).json({ success: false, error: "Invalid signature" });
+    }
+
+    // 🔒 Ensure message is for soulbound mint
+    if (!message.startsWith("mint-soulbound:")) {
+      return res.status(400).json({ success: false, error: "Invalid message format" });
+    }
 
     const user = new PublicKey(userPubkey);
 
+    // 🧼 Prevent duplicate soulbound
     const soulboundAta = await getOrCreateAssociatedTokenAccount(
       connection,
       BACKEND_WALLET,
@@ -166,7 +181,7 @@ app.post("/mint-soulbound", async (req, res) => {
       return res.status(400).json({ success: false, error: "Already owns soulbound NFT" });
     }
 
-    // ✅ Check user owns at least one valid plan NFT
+    // ✅ Check user owns at least one valid NFT
     let hasValidNFT = false;
     for (const mint of Object.values(NFT_MINTS)) {
       try {
@@ -181,14 +196,7 @@ app.post("/mint-soulbound", async (req, res) => {
           TOKEN_2022_PROGRAM_ID,
           ASSOCIATED_TOKEN_PROGRAM_ID
         );
-
-        const account = await getAccount(
-          connection,
-          ata.address,
-          "confirmed",
-          TOKEN_2022_PROGRAM_ID
-        );
-
+        const account = await getAccount(connection, ata.address, "confirmed", TOKEN_2022_PROGRAM_ID);
         if (Number(account.amount) > 0) {
           hasValidNFT = true;
           break;
