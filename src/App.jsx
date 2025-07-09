@@ -102,7 +102,11 @@ const App = () => {
   useEffect(() => {
     setNftBalance(planBalances[plan] || 0);
   }, [plan, planBalances]);
-
+  const signMessageAndGetSignature = async (wallet, message) => {
+    const encodedMessage = new TextEncoder().encode(message);
+    const signed = await wallet.signMessage(encodedMessage);
+    return Buffer.from(signed).toString("base64");
+  };
   const handlePayAndMint = async () => {
     if (!wallet.connected || !wallet.publicKey || loading) return;
     setLoading(true);
@@ -132,34 +136,43 @@ const App = () => {
     setStatus("⏳ Minting your NFT...");
 
     try {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
+      const timestamp = Date.now();
+      const message = `mint-nft:${wallet.publicKey.toBase58()}:${plan}:${timestamp}`;
+      const signature = await signMessageAndGetSignature(wallet, message);
 
-  const res = await fetch("https://nftproj.onrender.com/mint-nft", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userPubkey: wallet.publicKey.toBase58(), plan }),
-    signal: controller.signal,
-  });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
 
-  clearTimeout(timeout);
+      const res = await fetch("https://nftproj.onrender.com/mint-nft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userPubkey: wallet.publicKey.toBase58(),
+          plan,
+          message,
+          signature,
+        }),
+        signal: controller.signal,
+      });
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Backend error: ${errText}`);
-  }
+      clearTimeout(timeout);
 
-  const data = await res.json();
-  if (!data.success) throw new Error(data.error || "Mint failed");
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Backend error: ${errText}`);
+      }
 
-  setStatus(`🎉 NFT minted! Tx: ${data.txid}`);
-  await fetchPlanBalances();
-} catch (err) {
-  console.error(err);
-  setStatus(`❌ NFT minting failed: ${err.message}`);
-} finally {
-  setLoading(false);
-}
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Mint failed");
+
+      setStatus(`🎉 NFT minted! Tx: ${data.txid}`);
+      await fetchPlanBalances();
+    } catch (err) {
+      console.error(err);
+      setStatus(`❌ NFT minting failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleClaimSoulbound = async () => {

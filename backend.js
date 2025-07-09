@@ -16,8 +16,20 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import dotenv from "dotenv";
-
 dotenv.config();
+import nacl from "tweetnacl";
+
+function verifyWalletSignature({ wallet, message, signature }) {
+  try {
+    const pubkey = new PublicKey(wallet);
+    const encodedMsg = new TextEncoder().encode(message);
+    const sigBytes = Buffer.from(signature, "base64");
+
+    return nacl.sign.detached.verify(encodedMsg, sigBytes, pubkey.toBytes());
+  } catch (err) {
+    return false;
+  }
+}
 
 // 📜 JSON logger
 function logEventJSON(entry) {
@@ -38,9 +50,6 @@ function logEventJSON(entry) {
   } catch (err) {
     console.error("❌ Failed to write mint-log.json:", err);
   }
-
-  // Also output to Render logs
-  console.log("📝 EVENT:", JSON.stringify(entry));
 }
 
 const app = express();
@@ -72,10 +81,15 @@ const SOULBOUND_MINT = new PublicKey("BGZPPAY2jJ1rgFNhRkHKjPVmxx1VFUisZSo569Pi71
 // 🪙 Mint data plan NFT
 app.post("/mint-nft", async (req, res) => {
   try {
-    const { userPubkey, plan } = req.body;
-    if (!userPubkey || !plan || !NFT_MINTS[plan]) {
-      return res.status(400).json({ success: false, error: "Invalid request" });
-    }
+    const { userPubkey, plan, message, signature } = req.body;
+  if (!userPubkey || !plan || !NFT_MINTS[plan] || !message || !signature) {
+    return res.status(400).json({ success: false, error: "Invalid request" });
+  }
+
+  // ✅ Check that message and signature are valid
+  if (!verifyWalletSignature({ wallet: userPubkey, message, signature })) {
+    return res.status(401).json({ success: false, error: "Invalid signature" });
+  }
 
     const user = new PublicKey(userPubkey);
     const mint = NFT_MINTS[plan];
