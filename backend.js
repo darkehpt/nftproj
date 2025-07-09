@@ -39,6 +39,9 @@ function logEventJSON(entry) {
   } catch (err) {
     console.error("❌ Failed to write mint-log.json:", err);
   }
+
+  // Also output to Render logs
+  console.log("📝 EVENT:", JSON.stringify(entry));
 }
 
 const app = express();
@@ -70,7 +73,7 @@ const SOULBOUND_MINT = new PublicKey("BGZPPAY2jJ1rgFNhRkHKjPVmxx1VFUisZSo569Pi71
 // 🪙 Mint data plan NFT
 app.post("/mint-nft", async (req, res) => {
   try {
-    const { userPubkey, plan, oldMintAddress } = req.body;
+    const { userPubkey, plan, activationMint } = req.body;
     if (!userPubkey || !plan || !NFT_MINTS[plan]) {
       return res.status(400).json({ success: false, error: "Invalid request" });
     }
@@ -78,13 +81,13 @@ app.post("/mint-nft", async (req, res) => {
     const user = new PublicKey(userPubkey);
     const mint = NFT_MINTS[plan];
 
-    // 🔥 Optional: burn old NFT if provided
-    if (oldMintAddress) {
-      const oldMint = new PublicKey(oldMintAddress);
-      const oldTokenAccount = await getOrCreateAssociatedTokenAccount(
+    // 🔥 Optionally burn a previously held NFT to activate account
+    if (activationMint) {
+      const actMint = new PublicKey(activationMint);
+      const tokenAccount = await getOrCreateAssociatedTokenAccount(
         connection,
         BACKEND_WALLET,
-        oldMint,
+        actMint,
         user,
         false,
         "confirmed",
@@ -92,31 +95,39 @@ app.post("/mint-nft", async (req, res) => {
         TOKEN_2022_PROGRAM_ID,
         ASSOCIATED_TOKEN_PROGRAM_ID
       );
-      const tokenAccountInfo = await getAccount(
+
+      const tokenInfo = await getAccount(
         connection,
-        oldTokenAccount.address,
+        tokenAccount.address,
         "confirmed",
         TOKEN_2022_PROGRAM_ID
       );
 
-      if (Number(tokenAccountInfo.amount) > 0) {
+      if (Number(tokenInfo.amount) > 0) {
         const burnSig = await burn(
           connection,
           BACKEND_WALLET,
-          oldTokenAccount.address,
-          oldMint,
+          tokenAccount.address,
+          actMint,
           BACKEND_AUTHORITY,
           1,
           [],
           undefined,
           TOKEN_2022_PROGRAM_ID
         );
-        console.log(`🔥 Burned old NFT (${oldMintAddress}) for ${userPubkey}: ${burnSig}`);
-        logEventJSON({ type: "burn", wallet: userPubkey, mint: oldMintAddress, tx: burnSig });
+
+        const log = {
+          type: "activation-burn",
+          wallet: userPubkey,
+          mint: activationMint,
+          tx: burnSig,
+        };
+        console.log(`🔥 Burned activation NFT (${activationMint}) for ${userPubkey}: ${burnSig}`);
+        logEventJSON(log);
       }
     }
 
-    // 🎯 Mint new NFT
+    // 🎯 Mint the selected NFT
     const userAta = await getOrCreateAssociatedTokenAccount(
       connection,
       BACKEND_WALLET,
@@ -129,7 +140,7 @@ app.post("/mint-nft", async (req, res) => {
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
 
-    const sig = await mintTo(
+    const mintSig = await mintTo(
       connection,
       BACKEND_WALLET,
       mint,
@@ -141,10 +152,17 @@ app.post("/mint-nft", async (req, res) => {
       TOKEN_2022_PROGRAM_ID
     );
 
-    console.log(`✅ Minted ${plan} NFT to ${userPubkey}: ${sig}`);
-    logEventJSON({ type: "normal-nft-mint", wallet: userPubkey, plan, mint: mint.toBase58(), tx: sig });
+    const mintLog = {
+      type: "normal-nft-mint",
+      wallet: userPubkey,
+      plan,
+      mint: mint.toBase58(),
+      tx: mintSig,
+    };
+    console.log(`✅ Minted ${plan} NFT to ${userPubkey}: ${mintSig}`);
+    logEventJSON(mintLog);
 
-    res.json({ success: true, txid: sig, mint: mint.toBase58() });
+    res.json({ success: true, txid: mintSig, mint: mint.toBase58() });
   } catch (err) {
     console.error("❌ Mint error:", err);
     res.status(500).json({ success: false, error: err.message });
@@ -182,6 +200,7 @@ app.post("/mint-soulbound", async (req, res) => {
       return res.status(400).json({ success: false, error: "Already owns soulbound NFT" });
     }
 
+    // ✅ Check user owns at least one valid plan NFT
     let hasValidNFT = false;
     for (const mint of Object.values(NFT_MINTS)) {
       try {
@@ -227,8 +246,14 @@ app.post("/mint-soulbound", async (req, res) => {
       TOKEN_2022_PROGRAM_ID
     );
 
+    const sbLog = {
+      type: "soulbound-mint",
+      wallet: userPubkey,
+      mint: SOULBOUND_MINT.toBase58(),
+      tx: sig,
+    };
     console.log(`🔒 Soulbound NFT minted to ${userPubkey}: ${sig}`);
-    logEventJSON({ type: "soulbound-mint", wallet: userPubkey, mint: SOULBOUND_MINT.toBase58(), tx: sig });
+    logEventJSON(sbLog);
 
     res.json({ success: true, txid: sig });
   } catch (err) {
