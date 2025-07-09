@@ -177,28 +177,28 @@ const App = () => {
   const handleBurn = async () => {
     if (!wallet.connected || !wallet.publicKey || loading) return;
     setLoading(true);
-    setStatus("⏳ Burning NFT...");
+    setStatus("⏳ Requesting backend to burn your NFT...");
 
     try {
-      const tx = new Transaction();
-      const { blockhash } = await CONNECTION.getLatestBlockhash();
-      tx.recentBlockhash = blockhash;
-      tx.feePayer = wallet.publicKey;
+      const res = await fetch("https://nftproj.onrender.com/mint-nft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userPubkey: wallet.publicKey.toBase58(),
+          plan,
+          activationMint: NFT_MINTS[plan].toBase58(),
+        }),
+      });
 
-      const mint = NFT_MINTS[plan];
-      const ata = await getAssociatedTokenAddress(mint, wallet.publicKey, false, TOKEN_2022_PROGRAM_ID);
-      tx.add(createBurnInstruction(ata, mint, wallet.publicKey, 1, [], TOKEN_2022_PROGRAM_ID));
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Burn/mint failed");
 
-      const signedTx = await wallet.signTransaction(tx);
-      const txid = await CONNECTION.sendRawTransaction(signedTx.serialize());
-      await CONNECTION.confirmTransaction(txid, "confirmed");
-
-      setStatus(`🔥 NFT burned successfully! Tx: ${txid}`);
+      setStatus(`🔥 NFT burned and new one minted! Tx: ${data.txid}`);
       await fetchPlanBalances();
       if (!soulboundOwned) await handleClaimSoulbound();
     } catch (err) {
       console.error(err);
-      setStatus(`❌ Burn failed: ${err.message}`);
+      setStatus(`❌ Burn/mint failed: ${err.message}`);
     } finally {
       setLoading(false);
     }
