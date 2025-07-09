@@ -11,7 +11,6 @@ import {
 import {
   getOrCreateAssociatedTokenAccount,
   mintTo,
-  burn,
   getAccount,
   TOKEN_2022_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -73,7 +72,7 @@ const SOULBOUND_MINT = new PublicKey("BGZPPAY2jJ1rgFNhRkHKjPVmxx1VFUisZSo569Pi71
 // 🪙 Mint data plan NFT
 app.post("/mint-nft", async (req, res) => {
   try {
-    const { userPubkey, plan, activationMint } = req.body;
+    const { userPubkey, plan } = req.body;
     if (!userPubkey || !plan || !NFT_MINTS[plan]) {
       return res.status(400).json({ success: false, error: "Invalid request" });
     }
@@ -81,53 +80,6 @@ app.post("/mint-nft", async (req, res) => {
     const user = new PublicKey(userPubkey);
     const mint = NFT_MINTS[plan];
 
-    // 🔥 Optionally burn a previously held NFT to activate account
-    if (activationMint) {
-      const actMint = new PublicKey(activationMint);
-      const tokenAccount = await getOrCreateAssociatedTokenAccount(
-        connection,
-        BACKEND_WALLET,
-        actMint,
-        user,
-        false,
-        "confirmed",
-        undefined,
-        TOKEN_2022_PROGRAM_ID,
-        ASSOCIATED_TOKEN_PROGRAM_ID
-      );
-
-      const tokenInfo = await getAccount(
-        connection,
-        tokenAccount.address,
-        "confirmed",
-        TOKEN_2022_PROGRAM_ID
-      );
-
-      if (Number(tokenInfo.amount) > 0) {
-        const burnSig = await burn(
-          connection,
-          BACKEND_WALLET,
-          tokenAccount.address,
-          actMint,
-          BACKEND_AUTHORITY,
-          1,
-          [],
-          undefined,
-          TOKEN_2022_PROGRAM_ID
-        );
-
-        const log = {
-          type: "activation-burn",
-          wallet: userPubkey,
-          mint: activationMint,
-          tx: burnSig,
-        };
-        console.log(`🔥 Burned activation NFT (${activationMint}) for ${userPubkey}: ${burnSig}`);
-        logEventJSON(log);
-      }
-    }
-
-    // 🎯 Mint the selected NFT
     const userAta = await getOrCreateAssociatedTokenAccount(
       connection,
       BACKEND_WALLET,

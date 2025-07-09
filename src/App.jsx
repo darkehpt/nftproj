@@ -136,24 +136,26 @@ const App = () => {
     const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
 
     try {
-      const res = await fetch("https://nftproj.onrender.com/mint-nft", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userPubkey: wallet.publicKey.toBase58(), plan }),
-        signal: controller.signal,
-      });
+  const res = await fetch("https://nftproj.onrender.com/mint-nft", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userPubkey: wallet.publicKey.toBase58(), plan }),
+  });
 
-      clearTimeout(timeout);
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || "Mint failed");
+  if (!res.ok) {
+    const errText = await res.text(); // fallback if it's not JSON
+    throw new Error(`Backend error: ${errText}`);
+  }
 
-      setStatus(`🎉 NFT minted! Tx: ${data.txid}`);
-      await fetchPlanBalances();
-    } catch (err) {
-      clearTimeout(timeout);
-      console.error(err);
-      setStatus(`❌ NFT minting failed: ${err.name === 'AbortError' ? 'Request timed out' : err.message}`);
-    }
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || "Mint failed");
+
+  setStatus(`🎉 NFT minted! Tx: ${data.txid}`);
+  await fetchPlanBalances();
+} catch (err) {
+  console.error(err);
+  setStatus(`❌ NFT minting failed: ${err.message}`);
+}
 
       setStatus(`🎉 NFT minted! Tx: ${data.txid}`);
       await fetchPlanBalances();
