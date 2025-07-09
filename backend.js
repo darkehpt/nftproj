@@ -267,3 +267,7 @@ const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
+app.use((err, req, res, next) => {
+  console.error("❗ Uncaught backend error:", err);
+  res.status(500).json({ success: false, error: "Unexpected server error" });
+});
