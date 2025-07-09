@@ -152,8 +152,8 @@ app.post("/mint-soulbound", async (req, res) => {
 
     // 🔒 Ensure message is for soulbound mint
     if (!message.startsWith("I WANT MY SOULBOUND")) {
-    return res.status(400).json({ success: false, error: "Invalid message format" });
-  }
+  return res.status(400).json({ success: false, error: "Invalid message format" });
+}
 
     const user = new PublicKey(userPubkey);
 

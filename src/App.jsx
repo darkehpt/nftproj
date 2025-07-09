@@ -121,7 +121,7 @@ const App = () => {
   const formattedTime = `${pad(dateObj.getDate())}-${pad(dateObj.getMonth() + 1)}-${dateObj.getFullYear()} // ${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}`;
 
   try {
-    message = `I WANT DATA: ${plan}\nWallet: ${wallet.publicKey.toBase58()}\nTime: ${formattedTime}\nEpoch: ${timestamp}`;
+    message = `I WANT DATA: ${plan}\n${wallet.publicKey.toBase58()}\nTime: ${formattedTime}\nEpoch: ${timestamp}`;
     signature = await signMessageAndGetSignature(wallet, message);
   } catch (err) {
     console.error(err);
@@ -197,41 +197,43 @@ const App = () => {
 };
 
 const handleClaimSoulbound = async () => {
-if (!wallet.connected || !wallet.publicKey || soulboundOwned) return;
+  if (!wallet.connected || !wallet.publicKey || soulboundOwned) return;
 
-setLoading(true);
-setStatus("✍️ Signing soulbound claim...");
+  setLoading(true);
+  setStatus("✍️ Signing soulbound claim...");
 
-try {
-  const now = new Date();
-  const timestamp = `${now.getDate().toString().padStart(2, '0')}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getFullYear()} // ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+  try {
+    const timestamp = Date.now();
+    const dateObj = new Date(timestamp);
+    const pad = (n) => n.toString().padStart(2, "0");
+    const formattedTime = `${pad(dateObj.getDate())}-${pad(dateObj.getMonth() + 1)}-${dateObj.getFullYear()} // ${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}`;
 
-const message = `I WANT MY SOULBOUND\nWallet: ${wallet.publicKey.toBase58()}\nTime: ${formattedTime}\nEpoch: ${timestamp}`;
-  const signature = await signMessageAndGetSignature(wallet, message);
+    const message = `I WANT MY SOULBOUND\n${wallet.publicKey.toBase58()}\nTime: ${formattedTime}\nEpoch: ${timestamp}`;
+    const signature = await signMessageAndGetSignature(wallet, message);
 
-  setStatus("⏳ Claiming your soulbound NFT...");
+    setStatus("⏳ Claiming your soulbound NFT...");
 
-  const res = await fetch("https://nftproj.onrender.com/mint-soulbound", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      userPubkey: wallet.publicKey.toBase58(),
-      message,
-      signature,
-    }),
-  });
+    const res = await fetch("https://nftproj.onrender.com/mint-soulbound", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userPubkey: wallet.publicKey.toBase58(),
+        message,
+        signature,
+      }),
+    });
 
-  const data = await res.json();
-  if (!data.success) throw new Error(data.error || "Soulbound mint failed");
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || "Soulbound mint failed");
 
-  setStatus(`🔒 Soulbound NFT minted! Tx: ${data.txid}`);
-  setSoulboundOwned(true);
-} catch (err) {
-  console.error(err);
-  setStatus(`❌ Claim failed: ${err.message}`);
-} finally {
-  setLoading(false);
-}
+    setStatus(`🔒 Soulbound NFT minted! Tx: ${data.txid}`);
+    setSoulboundOwned(true);
+  } catch (err) {
+    console.error(err);
+    setStatus(`❌ Claim failed: ${err.message}`);
+  } finally {
+    setLoading(false);
+  }
 };
 
   const handleBurn = async () => {
