@@ -163,7 +163,7 @@ const App = () => {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 50000);
+    const timeout = setTimeout(() => controller.abort(), 120000);
 
     const res = await fetch("https://nftproj.onrender.com/mint-nft", {
       method: "POST",
@@ -186,16 +186,13 @@ const App = () => {
     }
 
     const data = await res.json();
-    if (!data.success) throw new Error(data.error || "Mint failed");
+  if (!data.success) throw new Error(data.error || "Mint failed");
 
-    setStatus(`🎉 NFT minted! Tx(s): ${data.txids.join(", ")}`);
-    await fetchPlanBalances();
-  } catch (err) {
-    console.error(err);
-    setStatus(`❌ NFT minting failed: ${err.message}`);
-  } finally {
-    setLoading(false);
-  }
+  const txLabel = Array.isArray(data.txids)
+    ? `🎉 NFT minted! Tx(s): ${data.txids.join(", ")}`
+    : `🎉 NFT minted! Tx: ${data.txid || "N/A"}`;
+
+  setStatus(txLabel);
 };
 
 const handleClaimSoulbound = async () => {
