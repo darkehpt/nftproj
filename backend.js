@@ -81,11 +81,21 @@ const SOULBOUND_MINT = new PublicKey("BGZPPAY2jJ1rgFNhRkHKjPVmxx1VFUisZSo569Pi71
 // 🪙 Mint data plan NFT
 app.post("/mint-nft", async (req, res) => {
   try {
-    const { userPubkey, plan, message, signature } = req.body;
+    const { userPubkey, plan, message, signature, quantity } = req.body;
+const qty = Math.max(1, parseInt(quantity || "1"));
   if (!userPubkey || !plan || !NFT_MINTS[plan] || !message || !signature) {
     return res.status(400).json({ success: false, error: "Invalid request" });
   }
-
+  // ⏳ Signature expiry check (max 2 minutes)
+  const match = message.match(/Epoch: (\d+)/);
+  if (!match) {
+    return res.status(400).json({ success: false, error: "Invalid timestamp format in message" });
+  }
+  const signedTime = parseInt(match[1], 10);
+  const now = Date.now();
+  if (now - signedTime > 2 * 60 * 1000) {
+    return res.status(400).json({ success: false, error: "Signature expired" });
+  }
   // ✅ Check that message and signature are valid
   if (!verifyWalletSignature({ wallet: userPubkey, message, signature })) {
     return res.status(401).json({ success: false, error: "Invalid signature" });
@@ -112,7 +122,7 @@ app.post("/mint-nft", async (req, res) => {
       mint,
       userAta.address,
       BACKEND_AUTHORITY,
-      1,
+      qty,
       [],
       undefined,
       TOKEN_2022_PROGRAM_ID
@@ -149,7 +159,15 @@ app.post("/mint-soulbound", async (req, res) => {
     if (!verifyWalletSignature({ wallet: userPubkey, message, signature })) {
       return res.status(401).json({ success: false, error: "Invalid signature" });
     }
-
+    const match = message.match(/Epoch: (\d+)/);
+    if (!match) {
+      return res.status(400).json({ success: false, error: "Invalid timestamp format in message" });
+    }
+    const signedTime = parseInt(match[1], 10);
+    const now = Date.now();
+    if (now - signedTime > 2 * 60 * 1000) {
+      return res.status(400).json({ success: false, error: "Signature expired" });
+    }
     // 🔒 Ensure message is for soulbound mint
     if (!message.startsWith("I WANT MY SOULBOUND")) {
   return res.status(400).json({ success: false, error: "Invalid message format" });

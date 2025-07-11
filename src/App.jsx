@@ -66,6 +66,7 @@ const App = () => {
   const [nftBalance, setNftBalance] = useState(0);
   const [soulboundOwned, setSoulboundOwned] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [quantity, setQuantity] = useState(1);
 
   const fetchPlanBalances = async () => {
     if (!wallet.connected || !wallet.publicKey) {
@@ -121,7 +122,7 @@ const App = () => {
   const formattedTime = `${pad(dateObj.getDate())}-${pad(dateObj.getMonth() + 1)}-${dateObj.getFullYear()} // ${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}`;
 
   try {
-    message = `I WANT DATA: ${plan}\n${wallet.publicKey.toBase58()}\nTime: ${formattedTime}\nEpoch: ${timestamp}`;
+    message = `I WANT DATA: ${quantity}x${plan}\n${wallet.publicKey.toBase58()}\nTime: ${formattedTime}\nEpoch: ${timestamp}`;
     signature = await signMessageAndGetSignature(wallet, message);
   } catch (err) {
     console.error(err);
@@ -170,6 +171,7 @@ const App = () => {
       body: JSON.stringify({
         userPubkey: wallet.publicKey.toBase58(),
         plan,
+        quantity,
         message,
         signature
       }),
@@ -224,7 +226,14 @@ const handleClaimSoulbound = async () => {
     });
 
     const data = await res.json();
-    if (!data.success) throw new Error(data.error || "Soulbound mint failed");
+    if (!data.success) {
+  if (data.error.includes("Already owns soulbound")) {
+    setSoulboundOwned(true);
+    setStatus("✅ You already have a soulbound NFT");
+    return;
+  }
+  throw new Error(data.error || "Soulbound mint failed");
+}
 
     setStatus(`🔒 Soulbound NFT minted! Tx: ${data.txid}`);
     setSoulboundOwned(true);
@@ -310,6 +319,14 @@ const handleClaimSoulbound = async () => {
         <option value="50GB">50GB – 0.05 SOL</option>
       </select>
 
+      <input
+        type="number"
+        min="1"
+        max="10"
+        value={quantity}
+        onChange={(e) => setQuantity(Number(e.target.value))}
+        className="p-2 border border-white bg-black rounded text-white w-24"
+      />
       <div className="flex flex-col items-center space-y-2">
         <img src={PLAN_IMAGES[plan]} alt={plan} className="rounded shadow-md" style={{ width: "300px", height: "300px" }} />
         <p className="text-lg font-semibold">Owned: <span className="text-blue-400">{nftBalance}</span></p>
