@@ -163,7 +163,7 @@ const App = () => {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), 50000);
 
     const res = await fetch("https://nftproj.onrender.com/mint-nft", {
       method: "POST",
