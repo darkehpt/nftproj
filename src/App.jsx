@@ -11,6 +11,7 @@ import {
   getAccount,
   createAssociatedTokenAccountInstruction,
   createBurnInstruction,
+  createCloseAccountInstruction,
   TOKEN_2022_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
@@ -271,7 +272,7 @@ const handleClaimSoulbound = async () => {
       tx.add(
         createBurnInstruction(ata, mint, wallet.publicKey, 1, [], TOKEN_2022_PROGRAM_ID)
       );
-      import { createCloseAccountInstruction } from "@solana/spl-token";
+
 
       // ⬇️ After burnInstruction
       tx.add(
