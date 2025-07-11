@@ -250,68 +250,71 @@ const handleClaimSoulbound = async () => {
   }
 };
 
-  const handleBurn = async () => {
-    if (!wallet.connected || !wallet.publicKey || loading || nftBalance === 0) return;
-    setLoading(true);
-    setStatus("⏳ Burning your NFT...");
+const handleBurn = async () => {
+  if (!wallet.connected || !wallet.publicKey || loading || nftBalance === 0) return;
+  setLoading(true);
+  setStatus("⏳ Burning your NFT...");
 
-    try {
-      const tx = new Transaction();
-      const { blockhash } = await CONNECTION.getLatestBlockhash();
-      tx.recentBlockhash = blockhash;
-      tx.feePayer = wallet.publicKey;
+  try {
+    const tx = new Transaction();
+    const { blockhash } = await CONNECTION.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = wallet.publicKey;
 
-      const mint = NFT_MINTS[plan];
-      const ata = await getAssociatedTokenAddress(mint, wallet.publicKey, false, TOKEN_2022_PROGRAM_ID);
-      const account = await getAccount(CONNECTION, ata, "confirmed", TOKEN_2022_PROGRAM_ID);
+    const mint = NFT_MINTS[plan];
+    const ata = await getAssociatedTokenAddress(mint, wallet.publicKey, false, TOKEN_2022_PROGRAM_ID);
+    const account = await getAccount(CONNECTION, ata, "confirmed", TOKEN_2022_PROGRAM_ID);
 
-      if (Number(account.amount) === 0) {
-        throw new Error("No NFT to burn");
-      }
+    const currentBalance = Number(account.amount);
+    if (currentBalance === 0) {
+      throw new Error("No NFT to burn");
+    }
 
-      tx.add(
-        createBurnInstruction(ata, mint, wallet.publicKey, 1, [], TOKEN_2022_PROGRAM_ID)
-      );
+    tx.add(
+      createBurnInstruction(ata, mint, wallet.publicKey, 1, [], TOKEN_2022_PROGRAM_ID)
+    );
 
-
-      // ⬇️ After burnInstruction
+    // ✅ Only add close instruction if this is the last NFT in the account
+    if (currentBalance === 1) {
       tx.add(
         createCloseAccountInstruction(
-          ata,                  // account to close
-          wallet.publicKey,     // rent refund receiver
-          wallet.publicKey,     // owner (payer)
-          [],                   // multisig signers (none)
+          ata,
+          wallet.publicKey,
+          wallet.publicKey,
+          [],
           TOKEN_2022_PROGRAM_ID
         )
       );
-      const signedTx = await wallet.signTransaction(tx);
-      const txid = await CONNECTION.sendRawTransaction(signedTx.serialize());
-      await CONNECTION.confirmTransaction(txid, "confirmed");
-
-      setStatus(`🔥 NFT burned successfully! Tx: ${txid}`);
-      await fetchPlanBalances();
-
-      // ✅ Send burn log to backend
-      try {
-        await fetch("https://nftproj.onrender.com/log-burn", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userPubkey: wallet.publicKey.toBase58(),
-            mint: mint.toBase58(),
-            txid,
-          }),
-        });
-      } catch (logErr) {
-        console.warn("⚠️ Failed to send burn log to backend:", logErr);
-      }
-    } catch (err) {
-      console.error(err);
-      setStatus(`❌ Burn failed: ${err.message}`);
-    } finally {
-      setLoading(false);
     }
-  };
+
+    const signedTx = await wallet.signTransaction(tx);
+    const txid = await CONNECTION.sendRawTransaction(signedTx.serialize());
+    await CONNECTION.confirmTransaction(txid, "confirmed");
+
+    setStatus(`🔥 NFT burned successfully! Tx: ${txid}`);
+    await fetchPlanBalances();
+
+    // ✅ Send burn log to backend
+    try {
+      await fetch("https://nftproj.onrender.com/log-burn", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userPubkey: wallet.publicKey.toBase58(),
+          mint: mint.toBase58(),
+          txid,
+        }),
+      });
+    } catch (logErr) {
+      console.warn("⚠️ Failed to send burn log to backend:", logErr);
+    }
+  } catch (err) {
+    console.error(err);
+    setStatus(`❌ Burn failed: ${err.message}`);
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="p-6 max-w-screen-md mx-auto text-center space-y-6 bg-black text-white rounded-lg shadow-lg">
