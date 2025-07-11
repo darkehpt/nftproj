@@ -146,17 +146,7 @@ const qty = Math.max(1, parseInt(quantity || "1"));
     console.log(`✅ Minted ${safeQuantity} ${plan} NFT(s) to ${userPubkey}: ${mintSigs.join(", ")}`);
     res.json({ success: true, txids: mintSigs, mint: mint.toBase58() });
 
-    const mintLog = {
-      type: "normal-nft-mint",
-      wallet: userPubkey,
-      plan,
-      mint: mint.toBase58(),
-      tx: mintSig,
-    };
-    console.log(`✅ Minted ${plan} NFT to ${userPubkey}: ${mintSig}`);
-    logEventJSON(mintLog);
-
-    res.json({ success: true, txid: mintSig, mint: mint.toBase58() });
+  
   } catch (err) {
     console.error("❌ Mint error:", err);
     res.status(500).json({ success: false, error: err.message });

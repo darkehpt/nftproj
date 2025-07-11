@@ -188,7 +188,7 @@ const App = () => {
     const data = await res.json();
     if (!data.success) throw new Error(data.error || "Mint failed");
 
-    setStatus(`🎉 NFT minted! Tx: ${data.txid}`);
+    setStatus(`🎉 NFT minted! Tx(s): ${data.txids.join(", ")}`);
     await fetchPlanBalances();
   } catch (err) {
     console.error(err);
