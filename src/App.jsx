@@ -140,7 +140,7 @@ const App = () => {
     tx.recentBlockhash = blockhash;
     tx.feePayer = wallet.publicKey;
 
-    const price = Math.round(PLAN_PRICES[plan] * 1e9);
+  const price = Math.round(PLAN_PRICES[plan] * quantity * 1e9);
     tx.add(SystemProgram.transfer({
       fromPubkey: wallet.publicKey,
       toPubkey: BACKEND_AUTHORITY,
@@ -312,7 +312,7 @@ const handleClaimSoulbound = async () => {
     <div className="p-6 max-w-screen-md mx-auto text-center space-y-6 bg-black text-white rounded-lg shadow-lg">
       <h1 className="text-3xl font-bold">🚀 Buy & Mint Data Plan NFT</h1>
       <div className="flex justify-center"><WalletMultiButton /></div>
-
+<label className="text-white font-medium mt-2">Quantity:</label>
       <select className="p-2 border border-white bg-black rounded text-white" value={plan} onChange={(e) => setPlan(e.target.value)}>
         <option value="10GB">10GB – 0.001 SOL</option>
         <option value="25GB">25GB – 0.025 SOL</option>

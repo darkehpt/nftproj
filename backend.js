@@ -116,17 +116,35 @@ const qty = Math.max(1, parseInt(quantity || "1"));
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
 
-    const mintSig = await mintTo(
-      connection,
-      BACKEND_WALLET,
-      mint,
-      userAta.address,
-      BACKEND_AUTHORITY,
-      qty,
-      [],
-      undefined,
-      TOKEN_2022_PROGRAM_ID
-    );
+    const safeQuantity = Math.min(Math.max(parseInt(quantity || "1"), 1), 10);
+
+    const mintSigs = [];
+    for (let i = 0; i < safeQuantity; i++) {
+      const sig = await mintTo(
+        connection,
+        BACKEND_WALLET,
+        mint,
+        userAta.address,
+        BACKEND_AUTHORITY,
+        1,
+        [],
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+      mintSigs.push(sig);
+    }
+
+    logEventJSON({
+      type: "normal-nft-mint",
+      wallet: userPubkey,
+      plan,
+      quantity: safeQuantity,
+      mint: mint.toBase58(),
+      txs: mintSigs,
+    });
+
+    console.log(`✅ Minted ${safeQuantity} ${plan} NFT(s) to ${userPubkey}: ${mintSigs.join(", ")}`);
+    res.json({ success: true, txids: mintSigs, mint: mint.toBase58() });
 
     const mintLog = {
       type: "normal-nft-mint",
