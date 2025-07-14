@@ -117,7 +117,6 @@ const App = () => {
     let message, signature;
     const timestamp = Date.now();
     const dateObj = new Date(timestamp);
-
     const pad = (n) => n.toString().padStart(2, "0");
     const formattedTime = `${pad(dateObj.getDate())}-${pad(dateObj.getMonth() + 1)}-${dateObj.getFullYear()} // ${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}`;
 
@@ -130,7 +129,7 @@ const App = () => {
       setLoading(false);
       return;
     }
-}
+
     setStatus("⏳ Processing payment...");
 
     let paymentTxid = null;
@@ -148,20 +147,18 @@ const App = () => {
       }));
 
       const signedTx = await wallet.signTransaction(tx);
-  paymentTxid = await CONNECTION.sendRawTransaction(signedTx.serialize());
+      paymentTxid = await CONNECTION.sendRawTransaction(signedTx.serialize());
 
-  // Inform user early that tx was sent
-  setStatus(`💸 Payment sent! Awaiting confirmation...\n🔗 https://explorer.solana.com/tx/${paymentTxid}?cluster=devnet`);
+      setStatus(`💸 Payment sent! Awaiting confirmation...\n🔗 https://explorer.solana.com/tx/${paymentTxid}?cluster=devnet`);
 
-  try {
-    const confirmation = await CONNECTION.confirmTransaction(paymentTxid, "confirmed");
-    if (confirmation.value.err) throw new Error("Transaction failed confirmation");
+      const confirmation = await CONNECTION.confirmTransaction(paymentTxid, "confirmed");
+      if (confirmation.value.err) throw new Error("Transaction failed confirmation");
 
-    setStatus(`✅ Payment confirmed! Tx: ${paymentTxid}`);
-  } catch (err) {
-    console.warn("⚠️ Confirmation timeout or error:", err);
-    setStatus(`⚠️ Payment sent, but confirmation pending.\nCheck: https://explorer.solana.com/tx/${paymentTxid}?cluster=devnet`);
-  }
+      setStatus(`✅ Payment confirmed! Tx: ${paymentTxid}`);
+    } catch (err) {
+      console.warn("⚠️ Confirmation timeout or error:", err);
+      setStatus(`⚠️ Payment sent, but confirmation pending.\nCheck: https://explorer.solana.com/tx/${paymentTxid}?cluster=devnet`);
+    }
 
     setStatus("⏳ Minting your NFT...");
 
@@ -196,15 +193,15 @@ const App = () => {
         ? `🎉 NFT minted! Tx(s): ${data.txids.join(", ")}`
         : `🎉 NFT minted! Tx: ${data.txid || "N/A"}`;
 
-        setStatus(txLabel);
-       await fetchPlanBalances();
-     } catch (err) {
-       console.error(err);
-       setStatus(`❌ NFT minting failed: ${err.message}`);
-     } finally {
-       setLoading(false);
-     }
-   }; 
+      setStatus(txLabel);
+      await fetchPlanBalances();
+    } catch (err) {
+      console.error(err);
+      setStatus(`❌ NFT minting failed: ${err.message}`);
+    } finally {
+      setLoading(false); // ✅ Always reset loading
+    }
+  }; // ✅ This is the real end of handlePayAndMint
 
 const handleClaimSoulbound = async () => {
   if (!wallet.connected || !wallet.publicKey || soulboundOwned) return;
