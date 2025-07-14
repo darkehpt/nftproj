@@ -130,7 +130,7 @@ const App = () => {
       setLoading(false);
       return;
     }
-
+};
     setStatus("⏳ Processing payment...");
 
     let paymentTxid = null;
