@@ -14,6 +14,8 @@ import {
   getAccount,
   TOKEN_2022_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
+  burn,
+closeAccount,
 } from "@solana/spl-token";
 import dotenv from "dotenv";
 dotenv.config();
@@ -146,13 +148,95 @@ const qty = Math.max(1, parseInt(quantity || "1"));
     console.log(`✅ Minted ${safeQuantity} ${plan} NFT(s) to ${userPubkey}: ${mintSigs.join(", ")}`);
     res.json({ success: true, txids: mintSigs, mint: mint.toBase58() });
 
-  
+
   } catch (err) {
     console.error("❌ Mint error:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
+app.post("/burn-nft", async (req, res) => {
+  try {
+    const { userPubkey, plan, message, signature } = req.body;
+
+    if (!userPubkey || !plan || !NFT_MINTS[plan] || !message || !signature) {
+      return res.status(400).json({ success: false, error: "Invalid request" });
+    }
+
+    if (!message.startsWith("BURN REQUEST")) {
+      return res.status(400).json({ success: false, error: "Invalid message format" });
+    }
+
+    const match = message.match(/Epoch: (\d+)/);
+    const signedTime = parseInt(match?.[1], 10);
+    if (!signedTime || Date.now() - signedTime > 2 * 60 * 1000) {
+      return res.status(400).json({ success: false, error: "Signature expired or invalid" });
+    }
+
+    if (!verifyWalletSignature({ wallet: userPubkey, message, signature })) {
+      return res.status(401).json({ success: false, error: "Invalid signature" });
+    }
+
+    const user = new PublicKey(userPubkey);
+    const mint = NFT_MINTS[plan];
+
+    const ata = await getOrCreateAssociatedTokenAccount(
+      connection,
+      BACKEND_WALLET,
+      mint,
+      user,
+      false,
+      "finalized",
+      undefined,
+      TOKEN_2022_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+
+    const account = await getAccount(connection, ata.address, "confirmed", TOKEN_2022_PROGRAM_ID);
+    if (Number(account.amount) === 0) {
+      return res.status(400).json({ success: false, error: "No NFT to burn" });
+    }
+
+    const sig = await burn(
+      connection,
+      BACKEND_WALLET,
+      ata.address,
+      mint,
+      BACKEND_AUTHORITY,
+      1,
+      [],
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
+
+    if (Number(account.amount) === 1) {
+      await closeAccount(
+        connection,
+        BACKEND_WALLET,
+        ata.address,
+        user,
+        BACKEND_AUTHORITY,
+        [],
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+    }
+
+    logEventJSON({
+      type: "backend-burn",
+      wallet: userPubkey,
+      plan,
+      tx: sig,
+      mint: mint.toBase58(),
+    });
+
+    console.log(`🔥 Burned ${plan} NFT for ${userPubkey}: ${sig}`);
+    res.json({ success: true, txid: sig });
+  } catch (err) {
+    console.error("❌ Burn error:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // 🎁 Claim soulbound NFT (with signature check)
 app.post("/mint-soulbound", async (req, res) => {

@@ -252,62 +252,36 @@ const handleClaimSoulbound = async () => {
 
 const handleBurn = async () => {
   if (!wallet.connected || !wallet.publicKey || loading || nftBalance === 0) return;
+
   setLoading(true);
-  setStatus("⏳ Burning your NFT...");
+  setStatus("✍️ Signing burn intent...");
 
   try {
-    const tx = new Transaction();
-    const { blockhash } = await CONNECTION.getLatestBlockhash();
-    tx.recentBlockhash = blockhash;
-    tx.feePayer = wallet.publicKey;
+    const timestamp = Date.now();
+    const dateObj = new Date(timestamp);
+    const pad = (n) => n.toString().padStart(2, "0");
+    const formattedTime = `${pad(dateObj.getDate())}-${pad(dateObj.getMonth() + 1)}-${dateObj.getFullYear()} // ${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}`;
+    const message = `BURN REQUEST: ${plan} NFT\n${wallet.publicKey.toBase58()}\nTime: ${formattedTime}\nEpoch: ${timestamp}`;
+    const signature = await signMessageAndGetSignature(wallet, message);
 
-    const mint = NFT_MINTS[plan];
-    const ata = await getAssociatedTokenAddress(mint, wallet.publicKey, false, TOKEN_2022_PROGRAM_ID);
-    const account = await getAccount(CONNECTION, ata, "confirmed", TOKEN_2022_PROGRAM_ID);
+    setStatus("🔥 Burning NFT via backend...");
 
-    const currentBalance = Number(account.amount);
-    if (currentBalance === 0) {
-      throw new Error("No NFT to burn");
-    }
+    const res = await fetch("https://nftproj.onrender.com/burn-nft", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userPubkey: wallet.publicKey.toBase58(),
+        message,
+        signature,
+        plan,
+      }),
+    });
 
-    tx.add(
-      createBurnInstruction(ata, mint, wallet.publicKey, 1, [], TOKEN_2022_PROGRAM_ID)
-    );
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
 
-    // ✅ Only add close instruction if this is the last NFT in the account
-    if (currentBalance === 1) {
-      tx.add(
-        createCloseAccountInstruction(
-          ata,
-          wallet.publicKey,
-          wallet.publicKey,
-          [],
-          TOKEN_2022_PROGRAM_ID
-        )
-      );
-    }
-
-    const signedTx = await wallet.signTransaction(tx);
-    const txid = await CONNECTION.sendRawTransaction(signedTx.serialize());
-    await CONNECTION.confirmTransaction(txid, "confirmed");
-
-    setStatus(`🔥 NFT burned successfully! Tx: ${txid}`);
+    setStatus(`🔥 NFT burned! Tx: ${data.txid}`);
     await fetchPlanBalances();
-
-    // ✅ Send burn log to backend
-    try {
-      await fetch("https://nftproj.onrender.com/log-burn", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userPubkey: wallet.publicKey.toBase58(),
-          mint: mint.toBase58(),
-          txid,
-        }),
-      });
-    } catch (logErr) {
-      console.warn("⚠️ Failed to send burn log to backend:", logErr);
-    }
   } catch (err) {
     console.error(err);
     setStatus(`❌ Burn failed: ${err.message}`);
