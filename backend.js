@@ -2,6 +2,8 @@
 import fs from "fs";
 import express from "express";
 import cors from "cors";
+import { createMintToInstruction } from "@solana/spl-token";
+import { Transaction } from "@solana/web3.js";
 import {
   Connection,
   Keypair,
@@ -17,6 +19,7 @@ import {
   burn,
 closeAccount,
 } from "@solana/spl-token";
+import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 dotenv.config();
 import nacl from "tweetnacl";
@@ -80,32 +83,42 @@ const NFT_MINTS = {
 // 🔒 Soulbound NFT mint address
 const SOULBOUND_MINT = new PublicKey("BGZPPAY2jJ1rgFNhRkHKjPVmxx1VFUisZSo569Pi71Pc");
 
+const mintLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10,             // limit each IP to 10 requests per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: "Rate limit exceeded. Try again later." }
+});
+
 // 🪙 Mint data plan NFT
-app.post("/mint-nft", async (req, res) => {
+app.post("/mint-nft", mintLimiter, async (req, res) => {
   try {
     const { userPubkey, plan, message, signature, quantity } = req.body;
-const qty = Math.max(1, parseInt(quantity || "1"));
-  if (!userPubkey || !plan || !NFT_MINTS[plan] || !message || !signature) {
-    return res.status(400).json({ success: false, error: "Invalid request" });
-  }
-  // ⏳ Signature expiry check (max 2 minutes)
-  const match = message.match(/Epoch: (\d+)/);
-  if (!match) {
-    return res.status(400).json({ success: false, error: "Invalid timestamp format in message" });
-  }
-  const signedTime = parseInt(match[1], 10);
-  const now = Date.now();
-  if (now - signedTime > 2 * 60 * 1000) {
-    return res.status(400).json({ success: false, error: "Signature expired" });
-  }
-  // ✅ Check that message and signature are valid
-  if (!verifyWalletSignature({ wallet: userPubkey, message, signature })) {
-    return res.status(401).json({ success: false, error: "Invalid signature" });
-  }
+    const requestedQty = parseInt(quantity || "1");
+    if (
+      !userPubkey || !plan || !NFT_MINTS[plan] || !message || !signature ||
+      isNaN(requestedQty) || requestedQty < 1 || requestedQty > 10
+    ) {
+      return res.status(400).json({ success: false, error: "Invalid request or mint quantity" });
+    }
+
+    // ⏳ Signature expiry check (max 2 min)
+    const match = message.match(/Epoch: (\d+)/);
+    const signedTime = parseInt(match?.[1], 10);
+    if (!signedTime || Date.now() - signedTime > 2 * 60 * 1000) {
+      return res.status(400).json({ success: false, error: "Signature expired" });
+    }
+
+    // ✅ Signature check
+    if (!verifyWalletSignature({ wallet: userPubkey, message, signature })) {
+      return res.status(401).json({ success: false, error: "Invalid signature" });
+    }
 
     const user = new PublicKey(userPubkey);
     const mint = NFT_MINTS[plan];
 
+    // Get/create user's ATA
     const userAta = await getOrCreateAssociatedTokenAccount(
       connection,
       BACKEND_WALLET,
@@ -118,36 +131,40 @@ const qty = Math.max(1, parseInt(quantity || "1"));
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
 
-    const safeQuantity = Math.min(Math.max(parseInt(quantity || "1"), 1), 10);
-
-    const mintSigs = [];
-    for (let i = 0; i < safeQuantity; i++) {
-      const sig = await mintTo(
-        connection,
-        BACKEND_WALLET,
-        mint,
-        userAta.address,
-        BACKEND_AUTHORITY,
-        1,
-        [],
-        undefined,
-        TOKEN_2022_PROGRAM_ID
+    // Build single transaction with multiple mint instructions
+    const tx = new Transaction();
+    for (let i = 0; i < requestedQty; i++) {
+      tx.add(
+        createMintToInstruction(
+          mint,
+          userAta.address,
+          BACKEND_AUTHORITY,
+          1,
+          [],
+          TOKEN_2022_PROGRAM_ID
+        )
       );
-      mintSigs.push(sig);
     }
+
+    tx.feePayer = BACKEND_AUTHORITY;
+    const { blockhash } = await connection.getLatestBlockhash("finalized");
+    tx.recentBlockhash = blockhash;
+
+    // Sign & send
+    const sig = await connection.sendTransaction(tx, [BACKEND_WALLET]);
+    await connection.confirmTransaction(sig, "finalized");
 
     logEventJSON({
       type: "normal-nft-mint",
       wallet: userPubkey,
       plan,
-      quantity: safeQuantity,
+      quantity: requestedQty,
       mint: mint.toBase58(),
-      txs: mintSigs,
+      txs: [sig],
     });
 
-    console.log(`✅ Minted ${safeQuantity} ${plan} NFT(s) to ${userPubkey}: ${mintSigs.join(", ")}`);
-    res.json({ success: true, txids: mintSigs, mint: mint.toBase58() });
-
+    console.log(`✅ Minted ${requestedQty} ${plan} NFT(s) to ${userPubkey}: ${sig}`);
+    res.json({ success: true, txids: [sig], mint: mint.toBase58() });
 
   } catch (err) {
     console.error("❌ Mint error:", err);
