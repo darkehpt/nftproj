@@ -337,7 +337,14 @@ const handleBurn = async () => {
         min="1"
         max="10"
         value={quantity}
-        onChange={(e) => setQuantity(Number(e.target.value))}
+        onChange={(e) => {
+  const val = Number(e.target.value);
+  if (!isNaN(val) && val >= 1 && val <= 10) {
+    setQuantity(val);
+  } else {
+    setQuantity(1); // fallback
+  }
+}}
         className="p-2 border border-white bg-black rounded text-white w-24"
       />
       <div className="flex flex-col items-center space-y-2">

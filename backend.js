@@ -58,6 +58,7 @@ function logEventJSON(entry) {
 }
 
 const app = express();
+app.set("trust proxy", 1); // ✅ Allows rate-limit to use 'X-Forwarded-For'
 app.use(cors());
 app.use(express.json());
 
@@ -152,22 +153,37 @@ app.post("/mint-nft", mintLimiter, async (req, res) => {
 
     // Sign & send
     const sig = await connection.sendTransaction(tx, [BACKEND_WALLET]);
-    await connection.confirmTransaction(sig, "finalized");
+  let confirmed = false;
 
-    logEventJSON({
-      type: "normal-nft-mint",
-      wallet: userPubkey,
-      plan,
-      quantity: requestedQty,
-      mint: mint.toBase58(),
-      txs: [sig],
-    });
+  try {
+    const result = await connection.confirmTransaction(sig, "finalized");
+    confirmed = result?.value?.err === null;
+  } catch (_) {}
+
+  if (!confirmed) {
+    // fallback: check status manually
+    await new Promise(r => setTimeout(r, 2000)); // wait 2 sec
+    const status = await connection.getSignatureStatus(sig);
+    if (!status?.value?.confirmationStatus) {
+      console.warn("⚠️ Mint tx still unconfirmed: ", sig);
+      // Optionally: log this or alert frontend
+    }
+  }
+
+  logEventJSON({
+    type: "normal-nft-mint",
+    wallet: userPubkey,
+    plan,
+    quantity: requestedQty,
+    mint: mint.toBase58(),
+    txs: [sig],
+  });
 
     console.log(`✅ Minted ${requestedQty} ${plan} NFT(s) to ${userPubkey}: ${sig}`);
     res.json({ success: true, txids: [sig], mint: mint.toBase58() });
 
   } catch (err) {
-    console.error("❌ Mint error:", err);
+    console.error("❌ Mint error:", err), { userPubkey, plan, quantity, err });
     res.status(500).json({ success: false, error: err.message });
   }
 });
