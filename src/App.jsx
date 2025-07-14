@@ -282,14 +282,20 @@ const handleBurn = async () => {
 
     setStatus(`🔥 NFT burned! Tx: ${data.txid}`);
     if (data.needsClose) {
-      const tx = new Transaction();
-      const ata = await getAssociatedTokenAddress(mint, wallet.publicKey, false, TOKEN_2022_PROGRAM_ID);
+      const mint = NFT_MINTS[plan];  // ✅ re-define mint here
 
-      tx.add(
+      const ata = await getAssociatedTokenAddress(
+        mint,
+        wallet.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID
+      );
+
+      const tx = new Transaction().add(
         createCloseAccountInstruction(
           ata,
-          wallet.publicKey,    // destination (refunds rent to user)
-          wallet.publicKey,    // user must sign this
+          wallet.publicKey,    // destination (refunds rent)
+          wallet.publicKey,    // authority (user)
           [],
           TOKEN_2022_PROGRAM_ID
         )
