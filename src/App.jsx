@@ -163,8 +163,13 @@ const App = () => {
     setStatus("⏳ Minting your NFT...");
 
     try {
+      let timeoutId;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 120000);
+      try {
+        timeoutId = setTimeout(() => {
+          controller.abort();
+          console.warn("⏰ Aborted mint request due to timeout.");
+        }, 120000);
 
       const res = await fetch("https://nftproj.onrender.com/mint-nft", {
         method: "POST",
@@ -179,7 +184,7 @@ const App = () => {
         signal: controller.signal,
       });
 
-      clearTimeout(timeout);
+      clearTimeout(timeoutId);
 
       if (!res.ok) {
         const errText = await res.text();
