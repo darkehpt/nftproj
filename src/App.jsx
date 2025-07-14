@@ -148,16 +148,20 @@ const App = () => {
       }));
 
       const signedTx = await wallet.signTransaction(tx);
-      paymentTxid = await CONNECTION.sendRawTransaction(signedTx.serialize());
-      await CONNECTION.confirmTransaction(paymentTxid, "confirmed");
+  paymentTxid = await CONNECTION.sendRawTransaction(signedTx.serialize());
 
-      setStatus(`💸 Payment successful! Tx: ${paymentTxid}`);
-    } catch (err) {
-      console.error(err);
-      setStatus(`❌ Payment failed: ${err.message}`);
-      setLoading(false);
-      return;
-    }
+  // Inform user early that tx was sent
+  setStatus(`💸 Payment sent! Awaiting confirmation...\n🔗 https://explorer.solana.com/tx/${paymentTxid}?cluster=devnet`);
+
+  try {
+    const confirmation = await CONNECTION.confirmTransaction(paymentTxid, "confirmed");
+    if (confirmation.value.err) throw new Error("Transaction failed confirmation");
+
+    setStatus(`✅ Payment confirmed! Tx: ${paymentTxid}`);
+  } catch (err) {
+    console.warn("⚠️ Confirmation timeout or error:", err);
+    setStatus(`⚠️ Payment sent, but confirmation pending.\nCheck: https://explorer.solana.com/tx/${paymentTxid}?cluster=devnet`);
+  }
 
     setStatus("⏳ Minting your NFT...");
 
