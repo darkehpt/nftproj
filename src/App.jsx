@@ -130,7 +130,7 @@ const App = () => {
       setLoading(false);
       return;
     }
-};
+}
     setStatus("⏳ Processing payment...");
 
     let paymentTxid = null;
@@ -196,16 +196,15 @@ const App = () => {
         ? `🎉 NFT minted! Tx(s): ${data.txids.join(", ")}`
         : `🎉 NFT minted! Tx: ${data.txid || "N/A"}`;
 
-      setStatus(txLabel);
-      await fetchPlanBalances(); // ✅ update UI with new balance
-
-    } catch (err) {
-    console.error(err);
-    setStatus(`❌ Signature failed: ${err.message}`);
-    setLoading(false);
-    return;
-  }
-  };
+        setStatus(txLabel);
+       await fetchPlanBalances();
+     } catch (err) {
+       console.error(err);
+       setStatus(`❌ NFT minting failed: ${err.message}`);
+     } finally {
+       setLoading(false);
+     }
+   }; 
 
 const handleClaimSoulbound = async () => {
   if (!wallet.connected || !wallet.publicKey || soulboundOwned) return;
