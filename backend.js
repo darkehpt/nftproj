@@ -209,18 +209,8 @@ app.post("/burn-nft", async (req, res) => {
       TOKEN_2022_PROGRAM_ID
     );
 
-    if (Number(account.amount) === 1) {
-      await closeAccount(
-        connection,
-        BACKEND_WALLET,
-        ata.address,
-        user,
-        BACKEND_AUTHORITY,
-        [],
-        undefined,
-        TOKEN_2022_PROGRAM_ID
-      );
-    }
+  const needsClose = Number(account.amount) === 1;
+
 
     logEventJSON({
       type: "backend-burn",
@@ -231,7 +221,7 @@ app.post("/burn-nft", async (req, res) => {
     });
 
     console.log(`🔥 Burned ${plan} NFT for ${userPubkey}: ${sig}`);
-    res.json({ success: true, txid: sig });
+    res.json({ success: true, txid: sig, needsClose });
   } catch (err) {
     console.error("❌ Burn error:", err);
     res.status(500).json({ success: false, error: err.message });

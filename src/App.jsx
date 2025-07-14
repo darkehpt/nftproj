@@ -281,6 +281,30 @@ const handleBurn = async () => {
     if (!data.success) throw new Error(data.error);
 
     setStatus(`🔥 NFT burned! Tx: ${data.txid}`);
+    if (data.needsClose) {
+      const tx = new Transaction();
+      const ata = await getAssociatedTokenAddress(mint, wallet.publicKey, false, TOKEN_2022_PROGRAM_ID);
+
+      tx.add(
+        createCloseAccountInstruction(
+          ata,
+          wallet.publicKey,    // destination (refunds rent to user)
+          wallet.publicKey,    // user must sign this
+          [],
+          TOKEN_2022_PROGRAM_ID
+        )
+      );
+
+      const { blockhash } = await CONNECTION.getLatestBlockhash();
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = wallet.publicKey;
+
+      const signed = await wallet.signTransaction(tx);
+      const txid = await CONNECTION.sendRawTransaction(signed.serialize());
+      await CONNECTION.confirmTransaction(txid, "confirmed");
+
+      setStatus((prev) => `${prev}\n✅ Account closed: ${txid}`);
+    }
     await fetchPlanBalances();
   } catch (err) {
     console.error(err);
@@ -289,6 +313,7 @@ const handleBurn = async () => {
     setLoading(false);
   }
 };
+
 
   return (
     <div className="p-6 max-w-screen-md mx-auto text-center space-y-6 bg-black text-white rounded-lg shadow-lg">
