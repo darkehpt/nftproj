@@ -37,9 +37,9 @@ const SOULBOUND_MINT = new PublicKey("BGZPPAY2jJ1rgFNhRkHKjPVmxx1VFUisZSo569Pi71
 
 const PLAN_PRICES = { "10GB": 0.001, "25GB": 0.025, "50GB": 0.05 };
 const NFT_MINTS = {
-  "10GB": new PublicKey("GXsBcsscLxMRKLgwWWnKkUzuXdEXwr74NiSqJrBs21Mz"),
-  "25GB": new PublicKey("HDtzBt6nvoHLhiV8KLrovhnP4pYesguq89J2vZZbn6kA"),
-  "50GB": new PublicKey("C6is6ajmWgySMA4WpDfccadLf5JweXVufdXexWNrLKKD"),
+  "10GB": new PublicKey("EkDgjd8vdVEPjRBpmpx71keviQg8dnzmJbWyVRYzH55D"),
+  "25GB": new PublicKey("iQG2pGzPdyQGSWQ3AJ3NbV3tXHeNisTGYuYyfZX139J"),
+  "50GB": new PublicKey("28WJRRm9oXR4nSN5S4NkDmahVSFhd3KdzeyYt9mCUxoW"),
 };
 const PLAN_IMAGES = { "10GB": pass1, "25GB": pass2, "50GB": pass3 };
 

@@ -2,12 +2,12 @@
 
 {
   "name": "50GB Plan NFT",
-  "symbol": "PASS",
+  "symbol": "deSIM",
   "description": "Redeemable NFT for 50GB of cloud storage",
   "image": "https://gateway.lighthouse.storage/ipfs/bafybeifcx7hzu6i4wpwf5xquk3wvguwkalexm4zqjce36tozj6hiisvhhe",
   "collection": {
     "name": "Data Plans",
-    "family": "StorageNFT"
+    "family": "DATANFT"
   },
 
   "attributes": [

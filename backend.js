@@ -72,9 +72,9 @@ console.log("✅ Backend wallet loaded:", BACKEND_AUTHORITY.toBase58());
 
 // 🎫 NFT plan mint addresses
 const NFT_MINTS = {
-  "10GB": new PublicKey("GXsBcsscLxMRKLgwWWnKkUzuXdEXwr74NiSqJrBs21Mz"),
-  "25GB": new PublicKey("HDtzBt6nvoHLhiV8KLrovhnP4pYesguq89J2vZZbn6kA"),
-  "50GB": new PublicKey("C6is6ajmWgySMA4WpDfccadLf5JweXVufdXexWNrLKKD"),
+  "10GB": new PublicKey("EkDgjd8vdVEPjRBpmpx71keviQg8dnzmJbWyVRYzH55D"),
+  "25GB": new PublicKey("iQG2pGzPdyQGSWQ3AJ3NbV3tXHeNisTGYuYyfZX139J"),
+  "50GB": new PublicKey("28WJRRm9oXR4nSN5S4NkDmahVSFhd3KdzeyYt9mCUxoW"),
 };
 
 // 🔒 Soulbound NFT mint address

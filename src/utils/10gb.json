@@ -2,12 +2,12 @@
 
 {
   "name": "10GB Plan NFT",
-  "symbol": "PASS",
+  "symbol": "deSIM",
   "description": "Redeemable NFT for 10GB of cloud storage",
   "image": "https://gateway.lighthouse.storage/ipfs/bafybeifflcpzmfcejb7gqvavbcet4dk3ou2i7z5e24s5kcm2yogak6wqmy",
   "collection": {
     "name": "Data Plans",
-    "family": "StorageNFT"
+    "family": "DATANFT"
   },
 
   "attributes": [
