@@ -200,11 +200,11 @@ const App = () => {
       await fetchPlanBalances(); // ✅ update UI with new balance
 
     } catch (err) {
-      console.error(err);
-      setStatus(`❌ NFT minting failed: ${err.message}`);
-    } finally {
-      setLoading(false); // ✅ always run this
-    }
+    console.error(err);
+    setStatus(`❌ Signature failed: ${err.message}`);
+    setLoading(false);
+    return;
+  }
   };
 
 const handleClaimSoulbound = async () => {
