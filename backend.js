@@ -183,7 +183,7 @@ app.post("/mint-nft", mintLimiter, async (req, res) => {
     res.json({ success: true, txids: [sig], mint: mint.toBase58() });
 
   } catch (err) {
-    console.error("❌ Mint error:", err), { userPubkey, plan, quantity, err });
+    console.error("❌ Mint error:", err, { userPubkey, plan, quantity });
     res.status(500).json({ success: false, error: err.message });
   }
 });
