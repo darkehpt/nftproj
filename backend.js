@@ -44,7 +44,17 @@ function verifyWalletSignature({ wallet, message, signature }) {
 
 // 📝 Supabase logger (outside any function)
 async function logEvent(entry) {
-  const { error } = await supabase.from("logs").insert([{ ...entry }]);
+  const base = {
+    type: entry.type || null,
+    wallet: entry.wallet || null,
+    plan: entry.plan || null,
+    ata: entry.ata || null,
+    tx: entry.tx || (Array.isArray(entry.txs) ? entry.txs[0] : null),
+    quantity: typeof entry.quantity === "number" ? entry.quantity : null,
+  };
+
+  const { error } = await supabase.from("logs").insert([base]);
+
   if (error) {
     console.error("❌ Supabase log error:", error);
   }
@@ -190,7 +200,8 @@ app.post("/mint-nft", mintLimiter, async (req, res) => {
     plan,
     quantity: requestedQty,
     mint: mint.toBase58(),
-    txs: [sig],
+    tx: sig,
+    ata: userAta.address.toBase58(),
   });
 
     console.log(`✅ Minted ${requestedQty} ${plan} NFT(s) to ${userPubkey}: ${sig}`);
@@ -263,8 +274,9 @@ app.post("/burn-nft", async (req, res) => {
     type: "backend-burn",
     wallet: userPubkey,
     plan,
-    tx: sig,
     mint: mint.toBase58(),
+    tx: sig,
+    ata: ata.address.toBase58(),
   });
 
     console.log(`🔥 Burned ${plan} NFT for ${userPubkey}: ${sig}`);
