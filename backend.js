@@ -50,15 +50,20 @@ async function logEvent(entry) {
     plan: entry.plan || null,
     ata: entry.ata || null,
     tx: entry.tx || (Array.isArray(entry.txs) ? entry.txs[0] : null),
-    quantity: typeof entry.quantity === "number" ? entry.quantity : null,
+    quantity: typeof entry.quantity === "number"
+      ? entry.quantity
+      : (entry.quantity ? parseInt(entry.quantity) : null),
   };
 
-  const { error, data } = await supabase.from("logs").insert([record]);
-
-  if (error) {
-    console.error("❌ Supabase log error:", JSON.stringify(error, null, 2));
-  } else {
-    console.log("✅ Supabase log saved:", data);
+  try {
+    const { error, data } = await supabase.from("logs").insert([record]);
+    if (error) {
+      console.error("❌ Supabase log error (detailed):", JSON.stringify(error, null, 2));
+    } else {
+      console.log("✅ Supabase log saved:", data);
+    }
+  } catch (e) {
+    console.error("🔥 Supabase insert exception:", e);
   }
 }
 
