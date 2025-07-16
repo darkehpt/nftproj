@@ -44,7 +44,7 @@ function verifyWalletSignature({ wallet, message, signature }) {
 
 // 📝 Supabase logger (outside any function)
 async function logEvent(entry) {
-  const base = {
+  const record = {
     type: entry.type || null,
     wallet: entry.wallet || null,
     plan: entry.plan || null,
@@ -53,10 +53,12 @@ async function logEvent(entry) {
     quantity: typeof entry.quantity === "number" ? entry.quantity : null,
   };
 
-  const { error } = await supabase.from("logs").insert([base]);
+  const { error, data } = await supabase.from("logs").insert([record]);
 
   if (error) {
-    console.error("❌ Supabase log error:", error);
+    console.error("❌ Supabase log error:", JSON.stringify(error, null, 2));
+  } else {
+    console.log("✅ Supabase log saved:", data);
   }
 }
 
