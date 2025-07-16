@@ -23,16 +23,30 @@ import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 dotenv.config();
 import nacl from "tweetnacl";
+import { createClient } from "@supabase/supabase-js";
 
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+// 🔒 Verify signature
 function verifyWalletSignature({ wallet, message, signature }) {
   try {
     const pubkey = new PublicKey(wallet);
     const encodedMsg = new TextEncoder().encode(message);
     const sigBytes = Buffer.from(signature, "base64");
-
     return nacl.sign.detached.verify(encodedMsg, sigBytes, pubkey.toBytes());
   } catch (err) {
     return false;
+  }
+}
+
+// 📝 Supabase logger (outside any function)
+async function logEvent(entry) {
+  const { error } = await supabase.from("logs").insert([{ ...entry }]);
+  if (error) {
+    console.error("❌ Supabase log error:", error);
   }
 }
 
@@ -170,7 +184,7 @@ app.post("/mint-nft", mintLimiter, async (req, res) => {
     }
   }
 
-  logEventJSON({
+  await logEvent({
     type: "normal-nft-mint",
     wallet: userPubkey,
     plan,
@@ -245,13 +259,13 @@ app.post("/burn-nft", async (req, res) => {
   const needsClose = Number(account.amount) === 1;
 
 
-    logEventJSON({
-      type: "backend-burn",
-      wallet: userPubkey,
-      plan,
-      tx: sig,
-      mint: mint.toBase58(),
-    });
+  await logEvent({
+    type: "backend-burn",
+    wallet: userPubkey,
+    plan,
+    tx: sig,
+    mint: mint.toBase58(),
+  });
 
     console.log(`🔥 Burned ${plan} NFT for ${userPubkey}: ${sig}`);
     res.json({ success: true, txid: sig, needsClose });
@@ -360,7 +374,7 @@ app.post("/mint-soulbound", async (req, res) => {
       tx: sig,
     };
     console.log(`🔒 Soulbound NFT minted to ${userPubkey}: ${sig}`);
-    logEventJSON(sbLog);
+  await logEvent(sbLog);
 
     res.json({ success: true, txid: sig });
   } catch (err) {
@@ -384,7 +398,7 @@ app.post("/log-burn", async (req, res) => {
     };
 
     console.log(`🧾 Received frontend burn log from ${userPubkey}: ${txid}`);
-    logEventJSON(burnLog);
+  await logEvent(burnLog);
 
     res.json({ success: true });
   } catch (err) {
